@@ -15,5 +15,12 @@ tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 
 [profile.dev]
-# debug = "true"
-debug = "line-tables-only"  # panic backtrace に file:line を残しつつコンパイル短縮
+## 速度を追求したオプション
+debug = false       # skip debuginfo generation for faster compile
+strip = "debuginfo" # remove any debuginfo dependencies emi
+
+# フルデバッグ
+# debug = true
+
+## 速度とバランスのデバッグ
+# debug = "line-tables-only"  # panic backtrace に file:line を残しつつコンパイル短縮
