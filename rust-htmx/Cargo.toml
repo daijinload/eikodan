@@ -13,3 +13,7 @@ minijinja-autoreload = "2"
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
+
+[profile.dev]
+# debug = "true"
+debug = "line-tables-only"  # panic backtrace に file:line を残しつつコンパイル短縮
