@@ -1,0 +1,21 @@
+<tr id="todo-{{ t.id }}">
+  <td>
+    <input type="checkbox" class="checkbox"
+           {% if t.done %}checked{% endif %}
+           hx-post="/todos/{{ t.id }}/toggle"
+           hx-target="#todo-{{ t.id }}"
+           hx-swap="outerHTML" />
+  </td>
+  <td class="{% if t.done %}line-through opacity-60{% endif %}">{{ t.title }}</td>
+  <td class="text-right">
+    <button class="btn btn-ghost btn-sm"
+            hx-get="/todos/{{ t.id }}/edit"
+            hx-target="#todo-{{ t.id }}"
+            hx-swap="outerHTML">編集</button>
+    <button class="btn btn-error btn-sm"
+            hx-delete="/todos/{{ t.id }}"
+            hx-target="#todo-{{ t.id }}"
+            hx-swap="outerHTML"
+            hx-confirm="削除しますか?">削除</button>
+  </td>
+</tr>
