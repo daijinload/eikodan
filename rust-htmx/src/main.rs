@@ -34,7 +34,7 @@ pub fn app() -> Router {
 
     let state = AppState { usecase, reloader };
 
-    Router::new()
+    let router = Router::new()
         .route("/", get(controller::index))
         .route("/todos", post(controller::create))
         .route(
@@ -45,7 +45,50 @@ pub fn app() -> Router {
         )
         .route("/todos/{id}/edit", get(controller::edit))
         .route("/todos/{id}/toggle", post(controller::toggle))
-        .with_state(state)
+        .with_state(state);
+
+    with_live_reload(router)
+}
+
+#[cfg(all(debug_assertions, not(test)))]
+fn not_htmx_predicate<T>(req: &axum::http::Request<T>) -> bool {
+    !req.headers().contains_key("hx-request")
+}
+
+#[cfg(all(debug_assertions, not(test)))]
+fn with_live_reload(router: Router) -> Router {
+    use notify::{RecursiveMode, Watcher};
+    use tower_livereload::LiveReloadLayer;
+
+    let livereload = LiveReloadLayer::new();
+    let reloader = livereload.reloader();
+
+    tokio::spawn(async move {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<()>();
+        let mut watcher = notify::recommended_watcher(
+            move |res: notify::Result<notify::Event>| {
+                if res.is_ok() {
+                    let _ = tx.send(());
+                }
+            },
+        )
+        .expect("create file watcher");
+        watcher
+            .watch(std::path::Path::new("templates"), RecursiveMode::Recursive)
+            .expect("watch templates");
+
+        while rx.recv().await.is_some() {
+            reloader.reload();
+        }
+        drop(watcher);
+    });
+
+    router.layer(livereload.request_predicate(not_htmx_predicate))
+}
+
+#[cfg(not(all(debug_assertions, not(test))))]
+fn with_live_reload(router: Router) -> Router {
+    router
 }
 
 #[tokio::main]
