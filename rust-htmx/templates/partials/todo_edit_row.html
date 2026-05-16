@@ -1,0 +1,21 @@
+<tr id="todo-{{ t.id }}">
+  <form hx-put="/todos/{{ t.id }}"
+        hx-target="#todo-{{ t.id }}"
+        hx-swap="outerHTML">
+    <td>
+      <input type="checkbox" class="checkbox" disabled
+             {% if t.done %}checked{% endif %} />
+    </td>
+    <td>
+      <input type="text" name="title" value="{{ t.title }}"
+             class="input input-bordered input-sm w-full" required autofocus />
+    </td>
+    <td class="text-right">
+      <button class="btn btn-primary btn-sm" type="submit">保存</button>
+      <button class="btn btn-ghost btn-sm" type="button"
+              hx-get="/todos/{{ t.id }}"
+              hx-target="#todo-{{ t.id }}"
+              hx-swap="outerHTML">キャンセル</button>
+    </td>
+  </form>
+</tr>

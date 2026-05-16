@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}TODO 一覧{% endblock %}
+{% block content %}
+<div class="card bg-base-100 shadow">
+  <div class="card-body">
+    <h1 class="card-title text-2xl">TODO</h1>
+
+    <form class="join w-full mt-2"
+          hx-post="/todos"
+          hx-target="#todo-list"
+          hx-swap="beforeend"
+          hx-on::after-request="if(event.detail.successful) this.reset()">
+      <input class="input input-bordered join-item w-full"
+             type="text" name="title" placeholder="やることを入力" required />
+      <button class="btn btn-primary join-item" type="submit">追加</button>
+    </form>
+
+    <div class="overflow-x-auto mt-4">
+      <table class="table">
+        <thead>
+          <tr>
+            <th class="w-12">完了</th>
+            <th>タイトル</th>
+            <th class="w-44 text-right">操作</th>
+          </tr>
+        </thead>
+        <tbody id="todo-list">
+          {% for t in todos %}
+            {% include "partials/todo_row.html" %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
