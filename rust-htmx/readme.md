@@ -26,8 +26,14 @@ cargo install cargo-watch
 
 # 5. （macOS のみ）リンカ lld の導入
 #    .cargo/config.toml が /opt/homebrew/opt/lld/bin/ld64.lld を参照しているので、未インストールだとビルドが失敗する
-#    使いたくない場合は .cargo/config.toml を削除すれば標準リンカ（Apple ld）で動く
+#    使いたくない場合は .cargo/config.toml のこのターゲット行を削除すれば標準リンカ（Apple ld）で動く
 brew install llvm lld
+
+# 5'. （Linux / Docker 上の Linux）リンカ mold の導入
+#     .cargo/config.toml が x86_64/aarch64-unknown-linux-gnu で -fuse-ld=mold を指定しているので、未インストールだとビルドが失敗する
+sudo apt install mold        # Debian / Ubuntu
+# sudo dnf install mold       # Fedora / RHEL 系
+# sudo pacman -S mold         # Arch
 ```
 
 ## 起動
@@ -218,7 +224,23 @@ rustflags = ["-C", "link-arg=-fuse-ld=/opt/homebrew/opt/lld/bin/ld64.lld"]
 - **差分ビルドで 100〜200ms 短縮、フルビルドは誤差〜わずかに遅い**
 - 依存数が少なく、Apple の新リンカ（Xcode 15+ の `ld_prime`）も既に高速なため Linux ほどの劇的効果は出ない
 - 依存が増えれば効きやすくなる想定で残置。不要なら `.cargo/config.toml` を削除すれば標準リンカに戻る
-- `mold` は macOS 非対応、`sold`（macOS 版 mold）は作者がアーカイブ済みのため選択肢外
+- `mold` は macOS 非対応、`sold`（macOS 版 mold）は作者がアーカイブ済みのため macOS では選択肢外
+
+#### Linux ターゲット（`mold`）
+
+Linux 側は `x86_64-unknown-linux-gnu` / `aarch64-unknown-linux-gnu` で `mold` を指定。`-fuse-ld=mold` は GCC 12.1 以降または最近の Clang で動作（Debian 12 / Ubuntu 22.04+ 以降の標準 cc は対応）。
+
+```toml
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+
+[target.aarch64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+```
+
+- Linux 標準の GNU `ld`（BFD）は設計が古く Rust 系の重いリンクで遅い → mold は公式ベンチで lld の 2〜3 倍速い（[mold README](https://github.com/rui314/mold)）
+- 本プロジェクト規模では絶対値の節約は小さいが、依存が増えた将来や CI 上のビルドで効きやすい
+- **Docker on Mac で Linux コンテナを動かす場合**: VM の中身は Linux なので mold は効く。ただし `target/` をホストにバインドマウントすると Docker Desktop の I/O オーバーヘッドで効果が打ち消される。`target/` は named volume に逃がすのが推奨
 
 ## テスト
 
