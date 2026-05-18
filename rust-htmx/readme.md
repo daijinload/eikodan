@@ -187,7 +187,49 @@ cargo watch -x run         # src/*.rs 保存で自動ビルド＆再起動
 - インクリメンタル再ビルドは約 0.3 秒（`debug = false` 効果込み）
 - 再起動後、ブラウザ側は tower-livereload の long-poll 切断を検知して自動リロード
 
-ビルドを伴わない hot-patch（Dioxus の subsecond 等）も2026時点で存在するが、Axum 適用はまだ実験的なので導入していない。
+### Rust側コードのホットリロード比較（axum vs subsecond）
+
+ビルドを伴わない hot-patch（[subsecond](https://docs.rs/subsecond/0.7.9/subsecond/) by Dioxus）を 2026/5 時点で実機検証した結果、**素のaxumに直接適用するルートは現状機能しないが、Dioxusに乗り換えれば動く**ことを確認した。サイドバイサイドの検証プロジェクト: [`../subsecond-demo/`](../subsecond-demo/)
+
+#### 検証1: 素のaxum + `cargo-hot`（subsecondクレートだけ追加）
+
+- `subsecond::call(...)` で各ハンドラ本体をラップ→ `cargo install cargo-hot --locked` → `cargo hot run`
+- 起動・ビルド・通常リクエストは成功するが、**ファイル変更時にパッチが送信されない**（dxログに patch event 一切なし）
+- 原因: `subsecond` クレート自体には CLI ランナーとの**接続/プロトコル実装が無い**（ソース確認: `TcpStream`/`UnixStream`/`env::var` の使用ゼロ）。Dioxus/Bevy/Iced はフレームワーク本体に接続コードを組み込んでいるから動くだけ
+- cargo-hot 公式README冒頭: 「**Currently just an exploration. Very broken! Will eat your laundry!**」（[hecrj/cargo-hot](https://github.com/hecrj/cargo-hot)）
+- → **素のaxumへの subsecond 適用は 2026/5 時点では非現実的**
+
+#### 検証2: Dioxus 0.7 + `dx serve --hotpatch`
+
+`subsecond-demo/` を作成し、Dioxus runtimeに組み込まれている subsecond プロトコル経由でホットパッチを試した。
+
+実機計測（macOS 26.4.1 / Apple Silicon / Rust 1.91.1 / dioxus-cli 0.7.9）:
+
+| 方式 | サイクル時間（平均） | 内訳 |
+|---|---|---|
+| **rust-htmx (axum + cargo-watch)** | **1405ms** | 3回計測: 1420 / 1393 / 1403ms |
+| **subsecond-demo (Dioxus + subsecond) — warm** | **214ms** | `cargo clean` 後の Session 3 で 263 / 213 / 212 / 218ms |
+| 同 cold（dx CLI 初回起動時のみ） | 1255ms | Session 1 の1回目だけ（後述） |
+
+→ **2回目以降の連続編集では subsecond が約6倍速い** (1.4s → 0.21s)。300ms を切るので人間の「即時感」のしきい値を跨ぐ。
+
+#### 「1回目だけ遅い」の正体
+
+最初は「シンボルキャッシュ cold」と仮説立てたが、`cargo clean` で target/ 691MB 完全削除＋21秒フルリビルドの真の cold 状態で再測定したら 263ms。**仮説は反証された**。
+
+dioxus-cli ソース `packages/cli/src/build/patch.rs` 抜粋:
+> "A cache for the hotpatching engine that stores the **original module's parsed symbol table**."
+
+このキャッシュは `HotpatchModuleCache::new(original: &Path, triple)` で**バイナリ単位**で作られ、関数単位ではない。だから「別の箇所を編集したら再び1回目と同じ遅さになる」現象は構造上発生しない。実測でも関数A→B→C→A の順で編集して全部 200〜300ms 帯だった。
+
+Session 1 の1255msは dx CLI の per-machine 初回ダウンロード（wasm-bindgen-cli / esbuild）と並走した一回限りの観測。プロジェクト導入後の通常運用ではほぼ常時 200〜300ms。
+
+#### 結論と適用判断
+
+- subsecond 自体は十分実用的（5〜6倍速 / sub-second 体感）
+- ただし**素のaxum + minijinja構成（本プロジェクト）への単独適用は2026/5時点では機能しない**
+- 採用するには「Dioxus(+axum fullstack) に乗り換える」必要があり、それはこのプロジェクトの htmx/minijinja 設計を捨てる選択になるので別件として扱う
+- 本プロジェクトは引き続き **cargo-watch + lld + debug=false** の組み合わせを採用する（1.4秒帯）
 
 ## ビルド最適化（dev profile）
 
