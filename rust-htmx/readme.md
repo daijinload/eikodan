@@ -23,6 +23,11 @@ cargo build
 
 # 4. （任意）Rust ソース変更時に自動再ビルドさせたい場合のみ（cargoの拡張機能なのでcargo.tomlには書けない）
 cargo install cargo-watch
+
+# 5. （macOS のみ）リンカ lld の導入
+#    .cargo/config.toml が /opt/homebrew/opt/lld/bin/ld64.lld を参照しているので、未インストールだとビルドが失敗する
+#    使いたくない場合は .cargo/config.toml を削除すれば標準リンカ（Apple ld）で動く
+brew install llvm lld
 ```
 
 ## 起動
@@ -192,6 +197,28 @@ strip = "debuginfo"
 - 出典: [Rust Performance Book](https://nnethercote.github.io/perf-book/build-configuration.html) — debuginfo を切ると 20〜40% 短縮
 - **トレードオフ**: lldb 等のステップ実行デバッガが使えなくなる。`println!`/`dbg!`/panic backtrace（関数名のみ）は使える
 - panic に行番号が必要なときは `debug = "line-tables-only"` に切り替え（Cargo.toml にコメント済み）
+
+### リンカ切替（lld）
+
+`.cargo/config.toml` で `aarch64-apple-darwin` のリンカを `lld`（`ld64.lld`）に切替済み。
+
+```toml
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-fuse-ld=/opt/homebrew/opt/lld/bin/ld64.lld"]
+```
+
+本プロジェクトでの計測結果（macOS 26.4.1 / Apple Silicon / Rust 1.91.1 / `cargo clean` 後）：
+
+| ビルド種別 | 標準（Apple `ld`） | lld |
+|---|---|---|
+| フルビルド | 14.47s | 14.71s |
+| 差分ビルド #1（`touch src/main.rs`） | 0.94s | 0.74s |
+| 差分ビルド #2（同上） | 0.73s | 0.63s |
+
+- **差分ビルドで 100〜200ms 短縮、フルビルドは誤差〜わずかに遅い**
+- 依存数が少なく、Apple の新リンカ（Xcode 15+ の `ld_prime`）も既に高速なため Linux ほどの劇的効果は出ない
+- 依存が増えれば効きやすくなる想定で残置。不要なら `.cargo/config.toml` を削除すれば標準リンカに戻る
+- `mold` は macOS 非対応、`sold`（macOS 版 mold）は作者がアーカイブ済みのため選択肢外
 
 ## テスト
 
