@@ -1,0 +1,15 @@
+{# アクティビティ一覧のフラグメント。フルページからの include でも、
+   HTMX の部分更新でも同じものを使う。view.recentActivities は camelCase 参照。 #}
+<ul class="timeline timeline-vertical">
+  {% for a in view.recentActivities %}
+  <li>
+    {% if not loop.first %}<hr />{% endif %}
+    <div class="timeline-start text-xs opacity-60">{{ a.at }}</div>
+    <div class="timeline-middle">
+      <span class="badge badge-xs badge-primary"></span>
+    </div>
+    <div class="timeline-end timeline-box">{{ a.action }}</div>
+    {% if not loop.last %}<hr />{% endif %}
+  </li>
+  {% endfor %}
+</ul>

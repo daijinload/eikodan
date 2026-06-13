@@ -1,0 +1,36 @@
+# codegen-backend をプロファイルで指定するための nightly opt-in。
+cargo-features = ["codegen-backend"]
+
+[workspace]
+resolver = "2"
+members = ["crates/app", "crates/webcore", "crates/schema", "crates/feature-user", "crates/rpc"]
+
+# 依存はここで一元管理する。featureクレートはここを編集しないこと
+# （ワークスペース共通Cargo.tomlの変更は全クレート再ビルドを誘発するため）。
+# connectrpc/buffa は schema/rpc クレートにだけ要るので、ここではなく各クレート側に置く。
+[workspace.dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["full"] }
+minijinja = "2"
+minijinja-autoreload = "2"
+tower-livereload = "0.9"
+notify = "8"
+listenfd = "1"
+# webcore が render_view（生成型 → minijinja + 埋め込みJSON）で使う。安定なので共有してよい。
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# ───────────────────────────────────────────────────────────
+# devプロファイル: コスト構造の非対称性を使う
+#   自分のコード  = 毎回変わる   → opt-level 0 で再コンパイル最速
+#   依存クレート  = 一度きり     → opt-level 3 で実行を速く（初回のみのコスト）
+# ───────────────────────────────────────────────────────────
+[profile.dev]
+opt-level = 0
+debug = false            # debuginfo生成を省いてコンパイル・リンクを短縮
+                         # （panicのfile:lineが欲しければ "line-tables-only" に）
+codegen-backend = "cranelift"  # 自分のコードは Cranelift で高速コード生成
+
+[profile.dev.package."*"]
+opt-level = 3
+codegen-backend = "llvm"       # 依存は LLVM で最適化（初回のみのコスト）

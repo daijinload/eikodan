@@ -1,0 +1,13 @@
+[package]
+name = "rpc"
+version = "0.1.0"
+edition = "2021"
+
+# Connect API レイヤー。HTML と同じ axum・同じポートに同居する薄い殻。
+# ハンドラは feature 側のサービス層関数を呼ぶだけ（自分への gRPC ループバック無し）。
+# 型は schema クレートの生成物を使うので、ここに codegen は無い。
+[dependencies]
+connectrpc = { version = "0.7.0", features = ["axum"] }
+buffa = { version = "0.7", features = ["json"] }
+schema = { path = "../schema" }
+feature-user = { path = "../feature-user" }
