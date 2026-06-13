@@ -1,11 +1,15 @@
 //! 共有Web基盤。テンプレートエンジン（MiniJinja + autoreload）とアプリ状態を提供する。
 //!
-//! 2つのレンダリング口を持つ:
-//! - [`AppState::render`]      … 任意の context を渡す素のレンダリング（HTMXフラグメント等）。
-//! - [`AppState::render_view`] … connectweb の肝。**スキーマ生成型インスタンスを1つ**渡すと、
-//!   それを minijinja に描画しつつ、**同じインスタンス**を HTML 末尾に
-//!   `<script type="application/json" id="view-data">` として埋め込む。
-//!   「この画面が実際に使ったデータ」が、別リクエストとのズレなく view-source で読める。
+//! 3つのレンダリング口を持つ:
+//! - [`AppState::render`]          … 任意の context を渡す素のレンダリング。
+//! - [`AppState::render_view`]     … connectweb の肝。**スキーマ生成型インスタンスを1つ**渡すと、
+//!   それを minijinja に描画しつつ、**同じインスタンス**を HTMLコメント `<!-- view-data ... -->`
+//!   として `</body>` 直前に埋め込む。「この画面が実際に使ったデータ」が、別リクエストとの
+//!   ズレなく view-source で読める。コメントなのであくまでデバッグ用の覗き窓で、JS/DOM の
+//!   一部にはならない（`<script>` タグや id で本番DOMを汚さない）。
+//! - [`AppState::render_view_fragment`] … HTMX部分更新（フラグメント）用。`render_view` と同様に
+//!   生成型インスタンスを描画しつつ、同じインスタンスを `<!-- view-data ... -->` コメントで
+//!   **先頭**に付ける（`<!doctype>` の無い断片なので先頭でよく、上から読むときデータが先に見える）。
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -78,8 +82,9 @@ impl AppState {
     /// スキーマ生成型インスタンスを1つ渡してフルページHTMLにする。
     ///
     /// `view` は `{ view => ... }` としてテンプレートに渡り、**同じ instance** が
-    /// HTML 末尾に JSON として埋め込まれる。データ生成は1回・出口は2つ（描画と埋め込み）
-    /// なので、画面の値と埋め込みJSONがズレようがない。
+    /// `</body>` 直前に `<!-- view-data ... -->` コメントとして埋め込まれる。データ生成は
+    /// 1回・出口は2つ（描画と埋め込み）なので、画面の値と埋め込みJSONがズレようがない。
+    /// コメントなので本番DOMを汚さず、view-source / DevTools のデバッグ用に読めるだけ。
     ///
     /// テンプレ側は serde 経由 = proto3 JSON の **camelCase** で参照する
     /// （例: proto の `recent_activities` は `view.recentActivities`）。
@@ -102,17 +107,58 @@ impl AppState {
             Ok(j) => j,
             Err(e) => return Html(render_error(&format!("encode view JSON for '{name}'"), &e.to_string())),
         };
-        Html(embed_view_json(html, &json))
+        Html(insert_view_comment(html, &json))
+    }
+
+    /// HTMX部分更新（フラグメント）用。`render_view` と同じく生成型インスタンスを1つ渡すと、
+    /// それを描画しつつ、**同じインスタンス**を HTMLコメント `<!-- view-data ... -->` として
+    /// **先頭**に付ける（レスポンスを上から読むときデータが先に見えるように）。
+    ///
+    /// `render_view` がフルページの `</body>` 直前に置くのに対し、断片には `<!doctype>` も
+    /// `</body>` も無いので先頭に置く。どちらもコメント形式なので本番DOMを汚さず、
+    /// view-source / DevTools(Network→Response) で「この断片が使ったデータ」を読むためのもの。
+    pub fn render_view_fragment<T: Serialize>(&self, name: &str, view: &T) -> Html<String> {
+        let env = match self.reloader.acquire_env() {
+            Ok(env) => env,
+            Err(e) => return Html(render_error("acquire env", &e.to_string())),
+        };
+        let tmpl = match env.get_template(name) {
+            Ok(t) => t,
+            Err(e) => return Html(render_error(&format!("template '{name}'"), &e.to_string())),
+        };
+        // render_view と同じく、描画と埋め込みで同じ serde 表現を使う（ズレ防止）。
+        let value = Value::from_serialize(view);
+        let html = match tmpl.render(context! { view => value }) {
+            Ok(html) => html,
+            Err(e) => return Html(render_error(&format!("render '{name}'"), &format!("{e:#}"))),
+        };
+        let json = match serde_json::to_string_pretty(view) {
+            Ok(j) => j,
+            Err(e) => {
+                return Html(render_error(
+                    &format!("encode view JSON for '{name}'"),
+                    &e.to_string(),
+                ))
+            }
+        };
+        Html(prepend_view_comment(html, &json))
     }
 }
 
-/// `<script type="application/json">` ブロックを `</body>` 直前（無ければ末尾）に挿入する。
-fn embed_view_json(html: String, json: &str) -> String {
-    // '<' を < に無害化する。値に `</script>` や `<!--` が混じっても
-    // ブロックが早期終了/破壊されない（< は JSON 文字列上では '<' と等価）。
-    // これは情報漏洩対策ではなく構文破壊対策（漏らさない設計はビュー専用スキーマ側で担保）。
-    let safe = json.replace('<', "\\u003c");
-    let block = format!("<script type=\"application/json\" id=\"view-data\">\n{safe}\n</script>\n");
+/// JSON を `<!-- view-data ... -->` コメントブロック（末尾改行つき）に組み立てる。
+/// コメントを途中で閉じる `-->`（および HTML5 が終端扱いする `--!>`）を作らないよう、
+/// 連続ハイフン `--` を `- -` に分離する。これは構文破壊対策で、漏らさない設計は
+/// ビュー専用スキーマ側で担保する。デバッグ閲覧用なので、JSON文字列値が `--` を含む
+/// 稀なケースだけ見た目が変わる（値そのものは別経路の API で厳密に確認できる）。
+fn view_comment_block(json: &str) -> String {
+    let safe = json.replace("--", "- -");
+    format!("<!-- view-data\n{safe}\n-->\n")
+}
+
+/// view-data コメントを `</body>` 直前（無ければ末尾）に挿入する（フルページ用）。
+/// `<!doctype>` より前に出すと quirks mode を誘発しうるので、先頭ではなく body 内に置く。
+fn insert_view_comment(html: String, json: &str) -> String {
+    let block = view_comment_block(json);
     match html.rfind("</body>") {
         Some(pos) => {
             let mut out = String::with_capacity(html.len() + block.len());
@@ -123,6 +169,13 @@ fn embed_view_json(html: String, json: &str) -> String {
         }
         None => format!("{html}\n{block}"),
     }
+}
+
+/// view-data コメントを HTML **先頭**に付ける（フラグメント用）。
+/// レスポンスを上から読んだとき、DOM断片より先にデータが目に入るようにしている。
+/// 断片には `<!doctype>` が無いので先頭でよい。
+fn prepend_view_comment(html: String, json: &str) -> String {
+    format!("{}{html}", view_comment_block(json))
 }
 
 fn render_error(stage: &str, msg: &str) -> String {

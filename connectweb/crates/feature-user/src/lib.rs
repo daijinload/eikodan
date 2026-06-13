@@ -8,7 +8,6 @@ use axum::extract::{Path, State};
 use axum::response::Html;
 use axum::routing::get;
 use axum::Router;
-use minijinja::{context, Value};
 use schema::{Activity, UserPageView};
 use webcore::AppState;
 
@@ -67,11 +66,9 @@ async fn user_page(State(state): State<AppState>, Path(id): Path<u32>) -> Html<S
 }
 
 /// HTMX 部分更新: アクティビティ一覧だけを差し替えるフラグメント。
-/// 部分HTMLなので埋め込みJSONは付けない（素の `render`）。
+/// 部分HTMLだが、デバッグ時にデータを見たいので、フルページと同じく `<!-- view-data ... -->`
+/// コメント形式で同じインスタンスを埋め込む（断片なので先頭に付く）。
 async fn activities_fragment(State(state): State<AppState>, Path(id): Path<u32>) -> Html<String> {
     let view = get_user(id).await;
-    state.render(
-        "user/activities.html",
-        context! { view => Value::from_serialize(&view) },
-    )
+    state.render_view_fragment("user/activities.html", &view)
 }

@@ -46,10 +46,10 @@ async fn html_page_renders_with_embedded_view_json() {
     // 描画された画面の値
     assert!(body.contains("ユーザー7"), "page should render the user name");
     assert!(body.contains("hx-get"), "page should contain an HTMX attribute");
-    // 末尾に埋め込まれた「この画面が使ったデータ」
+    // 末尾に埋め込まれた「この画面が使ったデータ」（デバッグ用コメント）
     assert!(
-        body.contains("id=\"view-data\""),
-        "page should embed the source view JSON"
+        body.contains("<!-- view-data"),
+        "page should embed the source view JSON as a debug comment"
     );
     // 埋め込みJSONは proto3 JSON の camelCase
     assert!(
