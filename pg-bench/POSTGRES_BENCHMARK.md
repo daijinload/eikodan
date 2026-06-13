@@ -78,14 +78,16 @@ SSD 側も同期書き込みしていない(VM のページキャッシュに溜
 - **理由:macOS の `open_datasync`/`fsync` は `F_FULLFSYNC` を発行しない。** つまり Mac では Postgres を `fsync=on` にしても
   書き込みは OS/ドライブのキャッシュ(RAM)に渡るだけで物理 NAND への強制フラッシュをしない。SSD パスでも同期点で物理ディスクを待っていない
   → **RAM ディスクが消せる待ちがそもそも無い**ので上乗せが誤差になる。(裏を返すと macOS の Postgres はデフォルトで電源断に対して非クラッシュセーフ。)
+- **⚠️ この「durable でも RAM≒SSD」は macOS 固有の結果。** Linux は `fdatasync` が実際に物理フラッシュするので、`fsync=on` なら RAM ディスク(tmpfs)が大きく効く。
+  OS が変われば結論も変わる(`fsync=off` で storage 差が消えるのは OS 共通だが、`fsync=on` での RAM≒SSD は Mac だから成り立つ話)。
 - **速度目的では RAM ディスクは不要。ただし**物理 SSD への書き込み自体は(遅延書き戻しで)発生するので、
   **SSD の書き込み寿命(摩耗)を避けたい / ディスク痕跡を残したくない用途では RAM ディスクは有効**(かつ僅かに速い)。
 
 ## 結論(プレーンな一文)
 
 **Mac で最速かつ高互換なのは「ネイティブ Postgres を unix ソケットで繋ぐ」構成。
-速度を生むのは①VM を挟まないこと ②`fsync=off`(c8 書き込みスループット +20%)で、RAM ディスクの速度上乗せは誤差(durable でも +2〜7%)。
-ただし RAM ディスクには SSD の書き込み摩耗を肩代わりする価値があるので、使い捨て DB を何度も init し直す用途では有効。**
+速度を生むのは①VM を挟まないこと ②`fsync=off`(c8 書き込みスループット +20%)。RAM ディスクの速度上乗せは誤差(durable でも +2〜7%。ただしこれは macOS 固有で、Linux では `fsync=on` 時に効く)で、
+価値は SSD の書き込み摩耗を肩代わりできる点にある(使い捨て DB を何度も init し直す用途で有効)。**
 
 ## わかったこと
 
@@ -128,6 +130,9 @@ SSD 側も同期書き込みしていない(VM のページキャッシュに溜
 
 ## 補足・限界
 
+- **すべて macOS (Apple Silicon / macOS 26.5.1) での測定。OS が変われば結論も変わりうる。**
+  とくに「durable でも RAM≒SSD」は macOS の fsync が物理フラッシュしないため成り立つ話で、
+  Linux など `fsync` が実フラッシュする OS では `fsync=on` 時に RAM ディスクが効く。Docker の VM 税も macOS/Windows 固有(本番 Linux には無い)。
 - 単一コネクション計測。実アプリでコネクションプール+並列を使うとサーバ型(native/container)はコア数分スケールするが、
   PGlite/pg-mem は単一スレッドなので頭打ち。差はさらに広がる方向。
 - Docker は Docker Desktop の VM 経由。Colima(vz/virtiofs)等に替えると多少縮むが、native には届かない。

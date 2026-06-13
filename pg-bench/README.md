@@ -23,6 +23,9 @@ node summary.mjs
 Mac で最速かつ高互換なのは **ネイティブPostgresを立てて unix ソケット接続**。
 速度を生むのは "VMを挟まないこと" と `fsync=off` で、**RAMディスクの速度上乗せは誤差**(durable でも +2〜7%)。
 ただし RAMディスクは **SSD の書き込み摩耗を肩代わり**できるので、使い捨て DB を何度も init し直す用途では有効。
+
+> ⚠️ 計測はすべて **macOS (Apple Silicon)**。「durable でも RAM≒SSD」は macOS の fsync が物理フラッシュしないため成り立つ話で、Linux では `fsync=on` 時に RAM ディスクが効く。OS が変われば結論も変わりうる。
+
 詳細は [POSTGRES_BENCHMARK.md](./POSTGRES_BENCHMARK.md) の「RAMディスク vs SSD を分離して再検証」。
 
 ## 採用構成と起動方法

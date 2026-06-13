@@ -3,6 +3,10 @@
 # 前回 docker-tmpfs vs docker-ssd は両方 fsync=off で、SSD側も同期書き込みしておらず
 # 変数を分離できていなかった。今回は native PG で fsync=on(durable)も測る。
 #
+# ⚠️ macOS 専用(hdiutil / diskutil を使用)。かつ結論は macOS の fsync 挙動に依存する:
+#    macOS の fsync は F_FULLFSYNC を出さず物理フラッシュしないため durable でも RAM≒SSD になる。
+#    Linux など fsync が実フラッシュする OS では fsync=on 時に RAM ディスクが効くので結果は変わる。
+#
 # 安全策:
 #  - 破壊するのは mktemp -d で作った $TMPDIR 配下の作業ディレクトリのみ(rm -rf 対象を限定)
 #  - RAMディスクは hdiutil で新規作成したデバイスのみ erase/detach($RAMDEV を /dev/diskN で検証)
