@@ -1,0 +1,18 @@
+/* Tailwind v4 + daisyUI v5 の入力CSS（スタンドアロンCLIで本番と同じエンジンで生成する）。
+ * 出力 → crates/app/static/app.css を app が /static/app.css で配信する。
+ * 監視: ./assets/tailwindcss -i assets/input.css -o crates/app/static/app.css --watch
+ *
+ * パージ対象はテンプレHTMLだけ。クラスは CLAUDE.md の規約どおり完全形で書かれている前提。
+ * 動的合成（text-{{ color }}-500 等）はここでスキャンできず本番で消えるので禁止のまま。 */
+@import "tailwindcss";
+
+/* 自分自身（実行ファイル/プラグインJS）はスキャン対象から除外して誤検出を防ぐ */
+@source not "./tailwindcss";
+@source not "./daisyui{,*}.mjs";
+
+/* クラス名の出どころは各featureのテンプレHTMLのみ */
+@source "../crates/**/templates/**/*.html";
+
+@plugin "./daisyui.mjs" {
+  themes: light --default, dark --prefersdark;
+}

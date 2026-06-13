@@ -2,8 +2,37 @@
 
 use std::path::PathBuf;
 
-use axum::Router;
+use axum::{response::IntoResponse, routing::get, Router};
 use webcore::AppState;
+
+/// CLI生成のCSSを `/static/app.css` で配信する。テンプレ同様ディスクから読む
+/// （tailwind --watch の出力を即反映。納品時の埋め込みはテンプレと足並みを揃えて将来対応）。
+const CSS_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/static/app.css");
+
+async fn app_css() -> impl IntoResponse {
+    match tokio::fs::read(CSS_PATH).await {
+        Ok(bytes) => {
+            let mut headers = axum::http::HeaderMap::new();
+            headers.insert(
+                axum::http::header::CONTENT_TYPE,
+                axum::http::HeaderValue::from_static("text/css; charset=utf-8"),
+            );
+            // debugビルドのみ no-cache: ライブリロードのたびに必ず取り直させ stale CSS を防ぐ。
+            // 本番のキャッシュ方針はテンプレ埋め込み対応時にまとめて決める。
+            #[cfg(debug_assertions)]
+            headers.insert(
+                axum::http::header::CACHE_CONTROL,
+                axum::http::HeaderValue::from_static("no-cache"),
+            );
+            (headers, bytes).into_response()
+        }
+        Err(_) => (
+            axum::http::StatusCode::NOT_FOUND,
+            "app.css 未生成: `bash assets/setup-css.sh` 後に tailwind --watch を回してください",
+        )
+            .into_response(),
+    }
+}
 
 /// MiniJinjaのテンプレートルート: appのshell + 各featureの templates/。
 /// featureを増やしたらここに1行足す（テンプレ名は feature名/部品名.html 規約）。
@@ -17,6 +46,7 @@ fn template_dirs() -> Vec<PathBuf> {
 fn build_router() -> Router {
     let state = AppState::new(template_dirs());
     Router::new()
+        .route("/static/app.css", get(app_css))
         .merge(feature_hello::routes())
         // Connect RPC: 未マッチのパス（例 POST /greet.v1.GreetService/Greet）を
         // Connectサービスへ流す。HTML(HTMX)とRPCを1プロセス・1ポートで同居させる。
@@ -67,7 +97,11 @@ fn with_live_reload(router: Router) -> Router {
                 }
             })
             .expect("create file watcher");
-        for dir in template_dirs() {
+        // テンプレHTML + CLI生成CSSの出力先を監視。
+        // テンプレ保存 → tailwind --watch が app.css を書き直す → そのCSS変更で再読込（最新CSSで反映）。
+        let mut watch_dirs = template_dirs();
+        watch_dirs.push(PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/static")));
+        for dir in watch_dirs {
             if let Err(e) = watcher.watch(&dir, RecursiveMode::Recursive) {
                 eprintln!("watch {dir:?} failed: {e}");
             }
