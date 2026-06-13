@@ -1,0 +1,30 @@
+# cargo-make — Rust エコシステム製 (Makefile.toml)。`cargo make <task>` か `makers <task>`。
+# 使い方:
+#   makers hello
+#   makers test            # 依存(build)を解決してから test
+#   makers greet Alice     # 末尾の引数が ${1} に入る
+
+[tasks.hello]
+description = "あいさつ"
+command = "echo"
+args = ["Hello from cargo-make!"]
+
+[tasks.build]
+description = "ダミービルド"
+command = "echo"
+args = ["==> building..."]
+
+[tasks.test]
+description = "build に依存"
+dependencies = ["build"]
+command = "echo"
+args = ["==> testing..."]
+
+[tasks.greet]
+description = "引数つき(${1}、無ければ World)"
+script = ['echo "Hi, ${1:-World}!"']
+
+[tasks.clean]
+description = "後片付け"
+command = "echo"
+args = ["==> cleaning..."]

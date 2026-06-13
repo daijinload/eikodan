@@ -1,0 +1,29 @@
+# just — Rust 製。Make 系の構文をそのまま使いやすくした定番。
+# 使い方:
+#   just            # default(一覧)が走る
+#   just test       # 依存(build)を解決してから test
+#   just greet Alice
+
+# 引数なしで実行したときの既定レシピ
+default:
+    @just --list
+
+# あいさつ
+hello:
+    @echo "Hello from just!"
+
+# ダミービルド
+build:
+    @echo "==> building..."
+
+# build に依存
+test: build
+    @echo "==> testing..."
+
+# 引数つき(デフォルト値 World)
+greet name="World":
+    @echo "Hi, {{name}}!"
+
+# 後片付け
+clean:
+    @echo "==> cleaning..."
