@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package greet.v1;
+
+// Connect RPC のデモサービス。型付きスキーマで Greet を1本だけ定義する。
+service GreetService {
+  rpc Greet(GreetRequest) returns (GreetResponse);
+}
+
+message GreetRequest {
+  string name = 1;
+}
+
+message GreetResponse {
+  string greeting = 1;
+}

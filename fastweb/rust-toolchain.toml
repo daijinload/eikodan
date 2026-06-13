@@ -1,0 +1,4 @@
+[toolchain]
+# 並列フロントエンド(-Zthreads)等の高速化フラグを使うため nightly に固定する。
+channel = "nightly"
+components = ["rust-src"]

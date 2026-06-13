@@ -1,0 +1,11 @@
+[package]
+name = "feature-hello"
+version = "0.1.0"
+edition = "2021"
+
+# featureクレートは「葉」に保つ: 依存は webcore（共有コア）のみ。
+# 他のfeatureへ依存したり、webcore→feature の逆向き依存を作らないこと。
+[dependencies]
+webcore = { path = "../webcore" }
+axum = { workspace = true }
+minijinja = { workspace = true }

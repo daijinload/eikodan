@@ -1,0 +1,13 @@
+# macOS(Apple Silicon): brew の lld を使う。mold はLinux専用なのでmacでは使わない。
+[target.aarch64-apple-darwin]
+rustflags = [
+  "-C", "link-arg=-fuse-ld=/opt/homebrew/opt/lld/bin/ld64.lld",
+  "-Z", "threads=8", # 並列フロントエンド(nightly)。型チェック/コンパイルの前段を並列化
+]
+
+# Linux はリンカに mold を使う（導入時のみ）。
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-fuse-ld=mold", "-Z", "threads=8"]
+
+[target.aarch64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-fuse-ld=mold", "-Z", "threads=8"]

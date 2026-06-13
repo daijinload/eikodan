@@ -1,0 +1,11 @@
+[package]
+name = "webcore"
+version = "0.1.0"
+edition = "2021"
+
+# 共有コア。各featureが依存する「本当に安定したものだけ」を置く。
+# ここに開発中の型を足すと全featureの再ビルドを誘発するので注意。
+[dependencies]
+axum = { workspace = true }
+minijinja = { workspace = true }
+minijinja-autoreload = { workspace = true }

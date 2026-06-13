@@ -1,0 +1,15 @@
+[package]
+name = "tests-http"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# 親ワークスペースから完全に切り離す: ここに空の [workspace] を置くことで
+# tests-http 自体が独立したワークスペースルートになり、target も別・干渉ゼロ。
+# アプリ本体のクレートを一切importしないので、アプリを変更してもここは再ビルド不要。
+[workspace]
+
+[dev-dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "http2"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+serde_json = "1"
