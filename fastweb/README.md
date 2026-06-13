@@ -56,6 +56,15 @@ cargo check -p <feature>         # 触っているクレートの型だけ確認
 cargo nextest run -p <feature>   # 触っているクレートの単体テストだけ
 ```
 
+### 節目のクリーンビルド（パージ確定）
+`--watch` の差分ビルドは追記的で、消したクラスがそのセッション中は `app.css` に残る（→ [HOTRELOAD.md](HOTRELOAD.md)）。
+**コミット/納品の前**と**パージに関わるリファクタ後**（クラスを動的合成や `.rs` に追い出した等）は、
+`--watch` なしで1回フル生成してパージを確定させる（=このネイティブコマンドを節目で叩く）:
+```sh
+./assets/tailwindcss -i assets/input.css -o crates/app/static/app.css
+```
+release ビルドはこのクリーン生成を必ず通るので、最終成果物は常に正しい。
+
 ### connect-rpc デモ（HTMLと同一ポートで同居）
 ```sh
 curl -X POST http://127.0.0.1:3000/greet.v1.GreetService/Greet \
