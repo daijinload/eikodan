@@ -2,13 +2,11 @@
  * 出力 → crates/app/static/app.css を app が /static/app.css で配信する。
  * 監視: ./assets/tailwindcss -i assets/input.css -o crates/app/static/app.css --watch
  *
- * パージ対象はテンプレHTMLだけ。クラスは CLAUDE.md の規約どおり完全形で書かれている前提。
- * 動的合成（text-{{ color }}-500 等）はここでスキャンできず本番で消えるので禁止のまま。 */
-@import "tailwindcss";
-
-/* 自分自身（実行ファイル/プラグインJS）はスキャン対象から除外して誤検出を防ぐ */
-@source not "./tailwindcss";
-@source not "./daisyui{,*}.mjs";
+ * source(none) で自動検出を切り、走査対象をテンプレHTMLだけに限定する。
+ * → クラスの出どころはテンプレHTMLのみ。Rustにクラス付きHTMLを書かない方針（ノービルド最優先）と一致し、
+ *   うっかり書くと (1)再ビルドが要る (2)走査外で無スタイル、の二重で気づける（ガードレール）。
+ *   動的合成（text-{{ color }}-500 等）も走査できないので従来どおり禁止。 */
+@import "tailwindcss" source(none);
 
 /* クラス名の出どころは各featureのテンプレHTMLのみ */
 @source "../crates/**/templates/**/*.html";
