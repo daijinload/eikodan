@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ view.name }} — connectweb{% endblock %}
+{% block content %}
+{# serde は proto3 JSON 準拠なのでフィールドは camelCase で参照する
+   （proto の recent_activities → view.recentActivities）。 #}
+<div class="card bg-base-100 shadow">
+  <div class="card-body">
+    <h1 class="card-title text-primary text-3xl">{{ view.name }}</h1>
+    <div class="flex gap-2">
+      <span class="badge badge-neutral">#{{ view.id }}</span>
+      <span class="badge badge-info">{{ view.role }}</span>
+    </div>
+    <p class="text-sm opacity-70">{{ view.email }}</p>
+
+    <div class="divider">最近のアクティビティ</div>
+    <div id="activities">
+      {% include "user/activities.html" %}
+    </div>
+    <button class="btn btn-sm btn-outline mt-2 w-fit"
+            hx-get="/users/{{ view.id }}/activities"
+            hx-target="#activities" hx-swap="innerHTML">
+      再読み込み
+    </button>
+
+    <div class="divider"></div>
+    <p class="text-xs opacity-50">
+      この画面が使ったデータは、ページ末尾の
+      <code>&lt;!-- view-data ... --&gt;</code>
+      コメントに <b>同じインスタンスのまま</b> 埋め込まれています（view-source で確認）。<br />
+      同じ型は Connect API でも返ります:
+      <code>POST /user.v1.UserService/GetUser</code>
+    </p>
+  </div>
+</div>
+{% endblock %}

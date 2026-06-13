@@ -1,0 +1,19 @@
+[package]
+name = "schema"
+version = "0.1.0"
+edition = "2021"
+
+# スキーマ(.proto)から生成した型を集約する「単一の真実」クレート。
+# codegen(build.rs/protoc)が走るのは proto を変更したときだけ。HTML・API どちらの
+# ハンドラもこのクレートが吐く型を共有する。
+[dependencies]
+# 生成コードが参照する Connect サービス定義のランタイム。
+connectrpc = "0.7.0"
+# protobufランタイム(buffa)。json feature で生成型に serde 実装が付く
+# （= minijinja へ渡せる／serde_json で埋め込みJSONにできる）。
+buffa = { version = "0.7", features = ["json"] }
+serde = { workspace = true }
+http-body = "1"
+
+[build-dependencies]
+connectrpc-build = "0.7.0"

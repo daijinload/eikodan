@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package user.v1;
+
+// connectweb の中核デモ。
+//
+// UserPageView は「ユーザー画面ごとのビュー専用」メッセージ。画面に出す約束の
+// フィールドだけを定義する（雑に全データ入りの型を作って一部だけ使う、はやらない）。
+// この1つの型が、
+//   - minijinja テンプレートに渡る型
+//   - HTML 末尾に埋め込む JSON の型（「この画面が使ったデータ」）
+//   - Connect API (GetUser) の返り値型
+// を兼ねる。スキーマを変えれば3経路すべてが同時に変わる（スキーマファースト）。
+service UserService {
+  rpc GetUser(GetUserRequest) returns (UserPageView);
+}
+
+message GetUserRequest {
+  uint32 id = 1;
+}
+
+message UserPageView {
+  uint32 id = 1;
+  string name = 2;
+  string email = 3;
+  string role = 4;
+  repeated Activity recent_activities = 5;
+}
+
+message Activity {
+  string action = 1;
+  string at = 2; // RFC3339 文字列
+}

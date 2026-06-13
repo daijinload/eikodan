@@ -1,0 +1,13 @@
+[package]
+name = "feature-user"
+version = "0.1.0"
+edition = "2021"
+
+# featureクレートは「葉」に保つ。connectweb では依存を webcore（共有コア）と
+# schema（スキーマ生成型 = 単一の真実）に限る。他のfeatureや connectrpc には依存しない
+# （API公開は rpc クレートが薄い殻として担当する）。
+[dependencies]
+webcore = { path = "../webcore" }
+schema = { path = "../schema" }
+axum = { workspace = true }
+minijinja = { workspace = true }

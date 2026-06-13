@@ -1,0 +1,16 @@
+[package]
+name = "app"
+version = "0.1.0"
+edition = "2021"
+
+# binは薄い層: ルーター組み立て・起動・開発用ライブリロードだけ。
+# 各featureを path 依存で束ね、HTMLは routes() を merge、APIは connect_service を同居させる。
+[dependencies]
+webcore = { path = "../webcore" }
+feature-user = { path = "../feature-user" }
+rpc = { path = "../rpc" }
+axum = { workspace = true }
+tokio = { workspace = true }
+tower-livereload = { workspace = true }
+notify = { workspace = true }
+listenfd = { workspace = true }
