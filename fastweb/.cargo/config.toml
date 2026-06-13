@@ -1,3 +1,12 @@
+# コンパイルキャッシュ。opt-level=3 でビルドされる重い依存(axum/tokio…)をキャッシュから返し、
+# フル再ビルド(cargo clean / 新規checkout / depsが変わるブランチ切替)を短縮する。
+# incremental は既定のON のまま残すこと（CARGO_INCREMENTAL=0 にしない）── 日常の差分ビルド/起動
+# の速さは incremental が担い、sccache はそこには効かない。両者は別レイヤなので併用する。
+# 要 `brew install sccache`（未導入だと "could not execute process sccache" でビルドが失敗する）。
+# 詳細な実測根拠は BENCHMARK.md ④。
+[build]
+rustc-wrapper = "sccache"
+
 # macOS(Apple Silicon): brew の lld を使う。mold はLinux専用なのでmacでは使わない。
 [target.aarch64-apple-darwin]
 rustflags = [

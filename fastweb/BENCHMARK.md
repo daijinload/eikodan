@@ -64,8 +64,56 @@ lldリンカ と opt非対称(dep=opt3 / own=opt0) は stable でも使えるの
 
 → **日々の編集ループを速くする正解は「nightlyを足す」ではなく「クレートを割る」。** `-Zthreads`が巨大クレートのフルビルドを救うのは事実だが、増分は救わない。package-by-feature は最初からこの状況を避けている。
 
+## ④ sccache を足すと効くのか（コンパイルキャッシュ）
+
+sccache 0.15.0 を `brew install` して、①②と同じダミー生成ワークスペース(30/90クレート)で計測。
+sccache は `RUSTC_WRAPPER` で挟むのでビルドフラグ(lld / cranelift / `-Z threads`)はそのまま維持し、sccache の有無だけを比較する。
+
+**先に効く仕組みを2点。** ① sccacheはrustc1呼び出しごとに「ソース＋フラグ＋依存rmeta＋コンパイラ」のハッシュを鍵にキャッシュし、鍵一致なら再コンパイルせず成果物を返す。
+② cargoは**incrementalを自分のworkspaceクレートにしか使わない**（registryの依存=axum/tokioには元々使わない）。
+そして**フル再ビルドで重いのはopt-level 3でビルドされる依存の方**。この2つが効き方とトレードオフを決める。
+
+> 当初メモにあった「`CARGO_INCREMENTAL=0` が必須」は誤り。incrementalを残したまま依存だけキャッシュできる（下表「incr ON」列）。
+> `CARGO_INCREMENTAL=0` は「自分のクレートもキャッシュしたい」ときの**任意**の追い込みで、その代償にincrementalを失う。
+
+### 日常ループ（差分ビルド / min of 3）
+
+| 操作 | baseline(sccache無) | **sccache + incr ON**（推奨） | sccache + incr OFF | incr=0 ペナルティ |
+|---|---|---|---|---|
+| no-op build (30) | 0.05s | 0.05s | 0.05s | ~0 |
+| 1編集→check (30) | 0.14s | **0.16s** | 0.24s | **+0.10s** |
+| 1編集→build (30) | 0.54s | **0.58s** | 0.60s | **+0.06s** |
+| 1編集→check (90) | 0.17s | **0.18s** | 0.27s | **+0.10s** |
+| 1編集→build (90) | 0.87s | **0.89s** | 0.93s | **+0.06s** |
+
+- **incrementalを残せば日常ループはbaselineとほぼ同じ（誤差・+0.01〜0.02s）。** 編集したクレートは内容が変わる＝必ずミスなのでsccacheの出番は無いが、incrementalが生きているので速い。
+- `CARGO_INCREMENTAL=0` の税は **check +0.10s ／ build +0.06s**。内訳は incremental喪失(+0.04s)＋sccacheラッパ往復(+0.06s)。
+- **このペナルティは規模で伸びない**（30も90も同じ +0.10/+0.06s）。差分ビルドが触るのは編集クレート＋合流点(app)だけでクレート総数に依らないため。
+
+### フル再ビルド（cargo clean → build、依存込み・定常warm）── sccache が効く場所
+
+| 規模 | sccache無 | **sccache + incr ON** | sccache + incr OFF |
+|---|---|---|---|
+| 30クレート | 8.2–8.4s | **5.7–6.0s**（約-28%） | **4.4s**（約-47%） |
+| 90クレート | 11.9–12.7s | **9.8s**（約-20%） | **5.1–5.5s**（約-57%） |
+
+- **効く実体は opt-level 3 / LLVM の依存クレート(axum・tokio・hyper…)がキャッシュから返ること。** 依存は incr の有無に関わらず100%ヒットした（cacheableな依存は全部ヒット・ミス0）。
+- **incr ON と OFF の差＝自分のクレートをキャッシュするか。** incr ONだとclean時に自crートは作り直し(opt0で安い)、incr OFFだとそれもヒット。クレート数が増えるほどOFFの取り分が伸びる（90個で 9.8s→5.3s）。
+- 注意点3つ:
+  1. **app(bin)は永遠にキャッシュされない**（`CannotCache(crate-type, bin)`。sccacheはライブラリしか効かない）。最後のリンクは毎回走る。
+  2. **ウォームアップが要る。** populate直後の初回clean buildはまだフルコスト〜それ以上(初回 ~10s/~14s)。rmetaのキー揺れで2回目から安定ヒット。
+  3. cranelift も `-Z threads` も**犯人ではない**（{cranelift on/off}×{threads on/off} の2×2で全てヒット・同等を確認）。フル構成のままキャッシュは効く。
+
+### 判断
+
+- sccacheが速くするのは **`cargo clean` / 新規checkout / 別worktree / depsが変わるブランチ切替** のような「依存ごとフル再ビルド」。**日常の編集ループ(①の世界)はそもそも依存を踏まないので、効くのはこの局面だけ。**
+- **入れるなら `RUSTC_WRAPPER=sccache` だけ、incrementalは残す（incr ON）。** 日常ループは誤差で、フル再ビルドが2〜3割速くなる「ほぼ片務的に得」な設定。フル再ビルドが多い人ほど効く。
+- **`CARGO_INCREMENTAL=0` はフル再ビルドが圧倒的に多い人 or CI向け。** フル再ビルドを約半分にする代わりに日常ループへ税(+0.1s・incremental喪失)を払う。常時localでこれは過剰。
+- ローカルでは cargo の `target/` が依存を保持するので「フル再ビルド」自体が稀。最大の旨味は **CI/共有キャッシュ**（マシンをまたいで依存を使い回す）で、そこは `CARGO_INCREMENTAL=0` 込みで隔離して使う。
+
 ## 結論
 
 - **大多数のプロジェクト規模では、編集ループは1秒未満**。1秒を超えるのは「起動して動作確認する瞬間(build)」だけで、それも自前5万行(機能90個)級から。
 - **この構成は今すぐ nightly を外してもビルド速度はほぼ落ちない**（安定版入りを待つ必要なし）。stableに倒すなら `Cargo.toml` の `cargo-features=["codegen-backend"]`＋`codegen-backend` 行と、`.cargo/config.toml` の `-Z threads=8` を外す。
 - ただし1クレートを肥大化(モノリス化)させると `-Zthreads` がフルビルドを約2倍速くする（craneliftは無関係・③参照）。ただし増分ループは救わないので本筋は分割。**nightlyは「葉クレートの規律を破ったときの、フルビルド用の保険」**。
+- **sccacheは現状入れていない。入れるなら `RUSTC_WRAPPER=sccache` だけ・incrementalは残す**（④）。日常ループは誤差のまま、フル再ビルド(cargo clean/新規checkout/deps変わるブランチ切替)が2〜3割速くなる。`CARGO_INCREMENTAL=0`での約半減はフル再ビルド過多な人/CI向けで、その代償に日常ループへ税を払う。最大の旨味はCI/共有キャッシュ。
