@@ -24,7 +24,8 @@ async fn index(State(state): State<AppState>) -> Html<String> {
     state.render("hello/index.html", context! { title => "fastweb" })
 }
 
-/// HTMXの部分HTML差し替えデモ。
-async fn clicked() -> Html<String> {
-    Html(r#"<span class="badge badge-success badge-lg">clicked! ✨</span>"#.to_string())
+/// HTMXの部分HTML差し替えデモ。HTMLはテンプレに置く。
+/// → Rust文字列に書くと再ビルドが要る上、Tailwindの走査外で無スタイルになる。
+async fn clicked(State(state): State<AppState>) -> Html<String> {
+    state.render("hello/clicked.html", context! {})
 }

@@ -3,10 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- 開発中はCDNでビルドゼロ。納品時はTailwind CLIでパージ済みCSSに差し替える。
-       バージョンは固定し、CDNとCLIで必ず揃えること。 -->
-  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
-  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <!-- Tailwind/daisyUI は開発中も本番と同じCLIで生成したCSSを配信する（開発＝本番）。
+       CDNのブラウザJITは使わない ── 実行時生成だとパージで本番だけ崩れるクラスを見逃すため。
+       テンプレ保存 → ./assets/tailwindcss --watch が app.css を数十msで再生成 → 自動リロード（Rustビルドは走らない）。
+       初回は `bash assets/setup-css.sh` でCLIを取得。詳細は README「CSSビルド」。 -->
+  <link rel="stylesheet" href="/static/app.css" />
+  <!-- HTMXはJSライブラリ（CSSパージ非対象）なのでCDNのまま固定 -->
   <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.10/dist/htmx.min.js"
           integrity="sha384-H5SrcfygHmAuTDZphMHqBJLc3FhssKjG7w/CeCpFReSfwBWDTKpkzPP8c+cLsK+V"
           crossorigin="anonymous"></script>
