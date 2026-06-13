@@ -1,0 +1,16 @@
+[package]
+name = "rpc"
+version = "0.1.0"
+edition = "2021"
+
+# connect-rpc レイヤー。proto定義とハンドラをこのクレートに隔離し、
+# codegen(build.rs)が走るのは proto を変更したときだけにする。
+[dependencies]
+connectrpc = { version = "0.7.0", features = ["axum"] }
+# 生成コードが要求するランタイム: protobufランタイム(buffa) と serde derive。
+buffa = { version = "0.7", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+http-body = "1"
+
+[build-dependencies]
+connectrpc-build = "0.7.0"

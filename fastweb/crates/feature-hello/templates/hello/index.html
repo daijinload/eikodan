@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="hero bg-base-100 rounded-box shadow">
+  <div class="hero-content text-center py-16">
+    <div class="max-w-md">
+      <h1 class="text-5xl font-bold text-primary">{{ title }}</h1>
+      <p class="py-6">
+        Rust + HTMX + MiniJinja + daisyUI。<br />
+        このテンプレートを保存し直すと、<b>再ビルド無し</b>で即反映されます。
+      </p>
+      <button class="btn btn-primary" hx-get="/clicked" hx-swap="outerHTML">
+        押してね
+      </button>
+    </div>
+  </div>
+</div>
+{% endblock %}
