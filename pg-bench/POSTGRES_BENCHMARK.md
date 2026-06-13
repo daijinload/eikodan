@@ -25,10 +25,8 @@
 
 (太字は各行の最速)
 
-> ⚠️ **上の表は「単一接続を1クエリずつ同期で叩いた時のレイテンシ」**を測っている。
-> これは「1往復の速さ」であって「最速スループット(並列でどこまで出るか)」ではない。
-> 設定ミスを疑って再点検した結果(下記)、**数値自体は正しいが“レイテンシ計測”であり、
-> スループットは別途 pgbench で測り直した**。結論(native が最速)は変わらず、むしろ並列では差が拡大する。
+> ⚠️ この表は **単一接続で1クエリずつ叩いたレイテンシ(1往復の速さ)**であって、並列スループットではない。
+> スループットは別途 pgbench で測り直した(下記)。結論(native が最速)は変わらず、並列ではむしろ差が拡大する。
 
 ## 設定の再点検(チューニング・環境の検証)
 
@@ -38,9 +36,8 @@
   `fsync=off, synchronous_commit=off, full_page_writes=off, shared_buffers=512MB(65536×8kB), wal_level=minimal, max_wal_size=4GB`
   が全て **`source=command line`**。default だけ stock(`fsync=on` 等)。→ tmpfs↔native の差は設定ではない。
 - **tmpfs は本当にメモリ。** `/var/lib/postgresql/data` は `tmpfs size=2097152k`(2GB RAM)で mount 確認済み。
-- **エンジン素の性能は全部ほぼ同じ。** ホスト網を除外して **VM内 / native で pgbench(-S, 単一クライアント)** を回すと:
-  docker-tmpfs **26,561 tps**(0.038ms) / apple **28,400** / native TCP **38,479** / native socket **53,168**。
-  → 中身は同じ Postgres 17 なので素の力は同等。native socket が高いのは「VMを挟まない+unixソケット」だけが理由。
+- **エンジン素の性能は全部ほぼ同じ。** ホスト網を除外して VM 内で pgbench を回すと docker/apple も native と同オーダー(下「スループット」表の〔参考〕行)。
+  中身は同じ Postgres 17 で、native socket が速いのは「VMを挟まない+unixソケット」だけが理由。エンジン差ではない。
 
 ## スループット(並列・pgbench で測り直し)
 
@@ -56,17 +53,39 @@
 | 〔参考〕Apple container(VM内) | 28,400 | 222,547 | — |
 
 要点:
-- **Macホストから繋ぐ限り、native socket が圧勝**(c8 で 218k tps、Docker の約12倍、Apple container の約5.5倍)。
-- **VM内なら全部同等**(26k〜28k / 110k〜222k)。差はすべて **ホスト→VM の往復(+0.05〜0.19ms)**。
-- **Apple container は Docker の約2倍**(c1: 11,640 vs 4,389 / c8: 39,814 vs 18,241)。コンテナで行くなら Apple 一択。
-- 私の最初の Node 単一接続計測(point SELECT)は、ホスト pgbench c1 と一致(docker 4,389≒4,337, native socket は Node 34k < pgbench 53k=Nodeクライアントのオーバーヘッド差)。→ **計測は正しい。ただしレイテンシであってスループットではない。**
-- **PGlite / pg-mem は単一スレッドなので並列で伸びない**:単一接続の数値(PGlite point ~7.6k)がほぼ上限。
-  対して native PG はプール+並列で 20万 tps 級まで伸びる → 負荷時の差は単一接続時よりさらに開く。
+- **ホストから繋ぐ限り native socket が圧勝**(c8 218k tps = Docker の約12倍 / Apple の約5.5倍)。差の正体はすべてホスト→VM の往復で、VM 内に入れれば全部同等(〔参考〕行)。
+- **コンテナで行くなら Apple 一択**(Docker の約2倍)。
+- **PGlite / pg-mem は単一スレッドで並列に伸びない**(単一接続値が上限)。native PG はプール+並列で 20万 tps 級まで伸び、負荷時ほど差が開く。
+
+## RAMディスク vs SSD を分離して再検証(durability 2x2)
+
+最初は docker-tmpfs(4,393)vs docker-ssd(4,389)で「差≒0」としたが、これは **両方 `fsync=off`** で測っており、
+SSD 側も同期書き込みしていない(VM のページキャッシュに溜まる)ので **変数を分離できていなかった**。
+そこで native PG で「RAMディスク / 実SSD」×「`fsync=on` / `off`」の 2x2 を測り直した(`durability_bench.sh`、pgbench -N=書き込み律速):
+
+| 構成 | c1 (1接続=レイテンシ) tps | c8 (8接続=スループット) tps |
+|---|---:|---:|
+| SSD durable (`fsync=on`) | 13,271 | 36,862 |
+| **RAM durable (`fsync=on`)** | **14,219** | **37,527** |
+| SSD throwaway (`fsync=off`) | 12,979 | 44,856 |
+| RAM throwaway (`fsync=off`) | 13,155 | 44,570 |
+
+(全条件 `wal_sync_method=open_datasync`)
+
+- **RAM vs SSD は durable でも誤差(c1 +7% / c8 +2%)。** VM 非介在・fsync 両モードで裏取りした、信頼できる結果。
+- **`fsync=on` と `fsync=off` が c1 でほぼ同速(13,271 vs 12,979)。** c1=13,000 tps は 1コミット ≈75µs。
+  本物の物理フラッシュ(NVMe の `F_FULLFSYNC`)なら 0.5〜1ms=1,000〜2,000 tps に落ちるはずが、落ちていない。
+- **理由:macOS の `open_datasync`/`fsync` は `F_FULLFSYNC` を発行しない。** つまり Mac では Postgres を `fsync=on` にしても
+  書き込みは OS/ドライブのキャッシュ(RAM)に渡るだけで物理 NAND への強制フラッシュをしない。SSD パスでも同期点で物理ディスクを待っていない
+  → **RAM ディスクが消せる待ちがそもそも無い**ので上乗せが誤差になる。(裏を返すと macOS の Postgres はデフォルトで電源断に対して非クラッシュセーフ。)
+- **速度目的では RAM ディスクは不要。ただし**物理 SSD への書き込み自体は(遅延書き戻しで)発生するので、
+  **SSD の書き込み寿命(摩耗)を避けたい / ディスク痕跡を残したくない用途では RAM ディスクは有効**(かつ僅かに速い)。
 
 ## 結論(プレーンな一文)
 
-**Mac で最速かつ高互換なのは「ネイティブ Postgres を常駐させ、unix ソケットで繋ぐ」構成。
-RAM ディスクは fsync を切れば速度的にはほぼ不要(差≒0)、効くのはチューニングと“VM を挟まないこと”。**
+**Mac で最速かつ高互換なのは「ネイティブ Postgres を unix ソケットで繋ぐ」構成。
+速度を生むのは①VM を挟まないこと ②`fsync=off`(c8 書き込みスループット +20%)で、RAM ディスクの速度上乗せは誤差(durable でも +2〜7%)。
+ただし RAM ディスクには SSD の書き込み摩耗を肩代わりする価値があるので、使い捨て DB を何度も init し直す用途では有効。**
 
 ## わかったこと
 
@@ -75,10 +94,11 @@ RAM ディスクは fsync を切れば速度的にはほぼ不要(差≒0)、効
    中身は全部同じ Postgres 17。違いは「unix socket / loopback TCP / 軽量VM / Docker の VM+ポート転送」という
    1往復あたりのコスト(p99: 0.04ms → 0.06ms → 0.19ms → 0.28ms)。
 
-2. **tmpfs(メモリ)と SSD の差は、チューニング済みならほぼゼロ。**
-   docker tmpfs 4,393 vs docker ssd 4,389(single INSERT)。
-   `fsync=off`/`synchronous_commit=off` でコミット毎のディスク同期が消え、ホットデータはページキャッシュに乗るため、
-   RAM ディスク化の上乗せは誤差。**「メモリに書く」効果の大半はチューニングで得られている。**
+2. **RAM ディスクと SSD の速度差は、durable(`fsync=on`)で測っても誤差(c1 +7% / c8 +2%)。**
+   native PG の 2x2(上記「RAMディスク vs SSD を分離して再検証」)より。理由は macOS の `fsync` が
+   `F_FULLFSYNC` を出さず物理フラッシュしないため、SSD パスでも同期点で物理ディスクを待っていないこと。
+   → **速度目的なら RAM ディスクは不要。ただし SSD の書き込み摩耗を避ける用途では有効**(物理書き戻しは発生するため)。
+   なお速さの源泉は別にあり、`fsync=off` は c8 書き込みスループットを +20% する。
 
 3. **チューニングは書き込みに効く(読み取りには無関係)。**
    docker default 3,148 → tuned 4,393(single INSERT, +40%)。SELECT/JOIN は不変。
@@ -92,17 +112,15 @@ RAM ディスクは fsync を切れば速度的にはほぼ不要(差≒0)、効
    - pg-mem = PG の **部分 JS 再実装**(低互換)で、かつ実クエリ最遅。テスト専用。
    - PGlite は本物PGをWASM化。組み込みで高互換だが、起動 389ms・単一接続・JOIN は native の 1/6。
 
-6. **Docker/コンテナが遅いのは「ホスト→VM 境界」だけ。同じ Docker の内側なら native 並みに速い。**
-   同一コンテナ内で pgbench を回すと docker-tmpfs **26,561 tps**(0.038ms)/ Apple **28,400** で、native(38k〜53k)と同オーダー。
-   同じものをホストから繋ぐと docker **4,389** / Apple **11,640** に落ちる。差は全部ホスト→VM の往復コスト。
+6. **Docker/コンテナが遅いのは「ホスト→VM 境界」だけ。同じ Docker の内側なら native 並み**(スループット表の〔参考〕行: docker VM内 26,561 ↔ ホストから 4,389 tps)。
    → **アプリも同じ Docker 網に入れれば速度は戻る**(別コンテナならコンテナ間TCP、最速は同一コンテナ/ソケット共有)。
    ただし Mac 開発では Rust ビルドを Docker 化する不利がある(README「Docker は内側なら速い」参照)。
 
 ## 用途別のおすすめ
 
-- **開発用ローカルDB / PC常駐させて使い捨て運用** → **ネイティブ Postgres(Postgres.app か `brew install postgresql@17`)を
-  ログイン常駐させ、unix ソケット接続、`fsync=off` 等でチューニング。** 最速かつ 100% 互換。RAM ディスクは任意(速度差≒0、
-  “ディスク痕跡ゼロ”が欲しい時だけ)。Postgres.app と brew 版はエンジン同一で速度も同じ。Postgres.app の利点はメニューバー常駐 GUI。
+- **開発用ローカルDB / 使い捨て運用** → **ネイティブ Postgres(Postgres.app か `brew install postgresql@17`)を
+  自分で起動し、unix ソケット接続、`fsync=off` 等でチューニング。** 最速かつ 100% 互換。
+  RAM ディスクは任意(速度差≒0、SSD 摩耗を避けたい時だけ)。Postgres.app と brew 版はエンジン同一で、利点はメニューバー常駐 GUI。
 - **十分速ければコンテナでもよい、を優先** → **Apple container(~9k ops/s)が Docker(~4.4k)の倍速**。
   Docker Desktop の VM+ポート転送がボトルネック。コンテナで行くなら Apple container 推奨。
 - **CIや自動テストで使い捨て・インストール不要** → **PGlite**(本物PG・高互換・ゼロ常駐)。pg-mem は最速でもないうえ低互換なので、
@@ -146,4 +164,10 @@ diskutil erasevolume HFS+ 'pgram' "$DISK"
 $PGBIN/initdb -D /Volumes/pgram/pgdata -U postgres -A trust
 $PGBIN/pg_ctl -D /Volumes/pgram/pgdata -l /tmp/pgram.log \
   -o "-p 5443 -k /tmp -c fsync=off -c synchronous_commit=off -c full_page_writes=off -c shared_buffers=512MB" start
+```
+
+RAMディスク vs 実SSD の durability 2x2(上表)を測り直す:
+
+```sh
+bash durability_bench.sh   # 作業ディレクトリと RAM ディスクは終了時に自動で後始末(rm 対象は $TMPDIR 配下のみ)
 ```
