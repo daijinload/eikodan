@@ -65,9 +65,16 @@ async fn main() {
             std.set_nonblocking(true).unwrap();
             tokio::net::TcpListener::from_std(std).unwrap()
         }
-        None => tokio::net::TcpListener::bind("127.0.0.1:3000")
-            .await
-            .unwrap(),
+        None => {
+            // 既定 3000。別worktreeを並列起動する等で衝突するときは PORT で上書き（例: PORT=3001）。
+            let port = std::env::var("PORT")
+                .ok()
+                .and_then(|p| p.parse::<u16>().ok())
+                .unwrap_or(3000);
+            tokio::net::TcpListener::bind(("127.0.0.1", port))
+                .await
+                .unwrap()
+        }
     };
     println!("listening on http://{}", listener.local_addr().unwrap());
     axum::serve(listener, router).await.unwrap();
