@@ -1,0 +1,16 @@
+{
+  "name": "pg-bench",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "アプリから接続した時の実効速度で in-memory Postgres 各方式を横並び比較するベンチ",
+  "scripts": {
+    "bench": "node bench.mjs",
+    "summary": "node summary.mjs"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.2.0",
+    "pg": "^8.13.0",
+    "pg-mem": "^3.0.0"
+  }
+}
