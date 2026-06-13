@@ -1,0 +1,41 @@
+# Task (go-task) — Go 製・YAML 定義。CI と相性が良い定番。
+# 使い方:
+#   task            # default(一覧)が走る
+#   task test       # 依存(build)を解決してから test
+#   task greet NAME=Alice
+version: '3'
+
+vars:
+  NAME: World
+
+tasks:
+  default:
+    cmds:
+      - task --list
+    silent: true
+
+  hello:
+    desc: あいさつ
+    cmds:
+      - echo "Hello from Task!"
+
+  build:
+    desc: ダミービルド
+    cmds:
+      - echo "==> building..."
+
+  test:
+    desc: build に依存
+    deps: [build]
+    cmds:
+      - echo "==> testing..."
+
+  greet:
+    desc: 引数つき(変数 NAME)
+    cmds:
+      - echo "Hi, {{.NAME}}!"
+
+  clean:
+    desc: 後片付け
+    cmds:
+      - echo "==> cleaning..."

@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# task-runners/bash/run
+#
+# なぜ作った: Make 代替を 8 つ比較した結論。just/Task 等は「もう一つツールを入れる」、
+#   mask は途中の失敗を握りつぶす・共通依存を 2 回走らせる・2022 年で更新停止、と難あり。
+#   bash だけで完結し、fail-fast(set -euo pipefail)と依存の重複排除(once)で
+#   その弱点を両方潰せる = 追加インストール不要で一番シンプルに正しく動く最小解。
+#
+# ツールを一切入れない「bash 関数 + ディスパッチャ」パターン。
+# 末尾の "${@:-help}" が肝で、`./run build` → 関数 build を呼ぶ。
+#
+#   ./run hello         # 実行するコマンドを + 付きで表示してから実行(既定ON)
+#   ./run test          # 依存は関数を呼ぶだけ(once で重複排除)
+#   ./run greet Alice
+#   ./run -q build      # -q / Q=1 でコマンド表示を抑止(結果だけ)
+#   ./run               # 引数なし → help(一覧)
+set -euo pipefail       # fail-fast: 途中で失敗したら即停止・exit!=0
+
+# 依存を「一度だけ」実行するためのメモ化ヘルパ(mask の prep 2回問題を防ぐ)
+# 連想配列(declare -A)は bash4+ 限定で macOS 標準の bash3.2 で落ちるため、
+# 文字列メンバーシップで判定して 3.2/POSIX sh でも動くようにする。
+_done=" "
+once() {
+  { _x=$-; set +x; } 2>/dev/null            # once 自身はトレースしない(この行も /dev/null へ)
+  case "$_done" in *" $1 "*) case "$_x" in *x*) set -x;; esac; return 0;; esac
+  _done="$_done$1 "
+  case "$_x" in *x*) set -x;; esac           # トレース復帰してから依存タスクを実行
+  "$1"
+}
+
+hello() {            # あいさつ
+  echo "Hello from bash!"
+}
+
+build() {            # ダミービルド
+  echo "==> building..."
+}
+
+test() {             # build に依存
+  once build
+  echo "==> testing..."
+}
+
+greet() {            # 引数つき(無ければ World)
+  local name="${1:-World}"
+  echo "Hi, $name!"
+}
+
+clean() {            # 後片付け
+  echo "==> cleaning..."
+}
+
+help() {             # タスク一覧
+  echo "usage: $0 <task> [args]"
+  echo "tasks:"
+  grep -E '^[a-z_]+\(\) +\{ +#' "$0" \
+    | sed -E 's/\(\) +\{ +# */\t/' | sort | sed 's/^/  /'
+}
+
+# 実行するコマンドを + 付き(展開済み)で表示する(既定ON)。-q または Q=1 で抑止。
+_trace=1
+[ "${Q:-0}" = 1 ] && _trace=0
+[ "${1:-}" = "-q" ] && { shift; _trace=0; }
+[ "${1:-help}" = "help" ] && _trace=0          # 一覧(help)はトレースしない
+[ "$_trace" = 1 ] && { PS4='+ '; set -x; }
+
+# ディスパッチ: 引数が無ければ help、あれば $1 と同名の関数を実行
+"${@:-help}"

@@ -1,0 +1,27 @@
+# mise — tasks 機能 + ツールのバージョン管理を兼ねる。`mise run <task>`。
+# 使い方:
+#   mise run hello
+#   mise run test          # 依存(build)を解決してから test
+#   mise run greet Alice   # 末尾の引数が name に入る
+
+[tasks.hello]
+description = "あいさつ"
+run = 'echo "Hello from mise!"'
+
+[tasks.build]
+description = "ダミービルド"
+run = 'echo "==> building..."'
+
+[tasks.test]
+description = "build に依存"
+depends = ["build"]
+run = 'echo "==> testing..."'
+
+[tasks.greet]
+description = "引数つき(usage で定義、$usage_name で受け取る)"
+usage = 'arg "name" default="World"'
+run = 'echo "Hi, $usage_name!"'
+
+[tasks.clean]
+description = "後片付け"
+run = 'echo "==> cleaning..."'
