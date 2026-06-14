@@ -12,5 +12,7 @@
 @source "../crates/**/templates/**/*.html";
 
 @plugin "./daisyui.mjs" {
-  themes: light --default, dark --prefersdark;
+  themes:
+    light --default,
+    dark --prefersdark;
 }

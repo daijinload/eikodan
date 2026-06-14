@@ -10,7 +10,7 @@
 # 使い方:  bash assets/check-css.sh        （lastshot/ 直下・どこからでも可。./run css-check 推奨）
 # 目視確認は通過後に:  CSS=built cargo run -p app   （release往復なし＝再ビルドしない）
 set -euo pipefail
-cd "$(dirname "$0")/.."   # lastshot/ へ
+cd "$(dirname "$0")/.." # lastshot/ へ
 
 bin=assets/tailwindcss
 in=assets/input.css
@@ -22,7 +22,7 @@ if [[ ! -x "$bin" ]]; then
 fi
 
 echo "==> [1/2] clean build (purge確定): $out"
-"$bin" -i "$in" -o "$out"   # --watch なし = 毎回フルパージ（消したクラスも確実に落ちる）
+"$bin" -i "$in" -o "$out" # --watch なし = 毎回フルパージ（消したクラスも確実に落ちる）
 
 echo "==> [2/2] semgrep: パージで消える危険パターン検査"
 if ! command -v semgrep >/dev/null 2>&1; then

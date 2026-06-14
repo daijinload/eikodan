@@ -5,6 +5,6 @@
 -- Flyway versioned migration: この版数(タイムスタンプ)は一度だけ適用されるので、
 -- 旧 schema.sql の "if not exists" のような冪等ガードは付けない（素の DDL を書く）。
 create table counter (
-  id    integer primary key,
-  value integer not null default 0
+    id integer primary key,
+    value integer not null default 0
 );

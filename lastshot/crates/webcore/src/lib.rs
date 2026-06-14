@@ -11,8 +11,7 @@
 //!   生成型インスタンスを描画しつつ、同じインスタンスを `<!-- view-data ... -->` コメントで
 //!   **先頭**に付ける（`<!doctype>` の無い断片なので先頭でよく、上から読むときデータが先に見える）。
 
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use axum::response::Html;
 use db::PgPool;
@@ -119,7 +118,12 @@ impl AppState {
         };
         let json = match serde_json::to_string_pretty(view) {
             Ok(j) => j,
-            Err(e) => return Html(render_error(&format!("encode view JSON for '{name}'"), &e.to_string())),
+            Err(e) => {
+                return Html(render_error(
+                    &format!("encode view JSON for '{name}'"),
+                    &e.to_string(),
+                ))
+            }
         };
         Html(insert_view_comment(html, &json))
     }

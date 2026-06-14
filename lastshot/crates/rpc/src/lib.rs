@@ -7,7 +7,9 @@
 //! 同じロジック・同じ DB から生まれる。同一プロセス内なので自分への通信も
 //! シリアライズも発生しない。
 
-use connectrpc::{handler_fn, ConnectRpcService, RequestContext, Response, Router as ConnectRouter};
+use connectrpc::{
+    handler_fn, ConnectRpcService, RequestContext, Response, Router as ConnectRouter,
+};
 use db::PgPool;
 use schema::{GetCountRequest, IncrementRequest};
 

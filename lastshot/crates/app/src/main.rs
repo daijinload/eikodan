@@ -123,13 +123,12 @@ fn with_live_reload(router: Router) -> Router {
 
     tokio::spawn(async move {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<()>();
-        let mut watcher =
-            notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-                if res.is_ok() {
-                    let _ = tx.send(());
-                }
-            })
-            .expect("create file watcher");
+        let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+            if res.is_ok() {
+                let _ = tx.send(());
+            }
+        })
+        .expect("create file watcher");
         // テンプレHTMLを常に監視（保存→自動リロード）。
         // builtモードのときだけCLI生成CSSの出力先 static/ も監視する
         // （tailwind --watch が app.css を書き直す → そのCSS変更で再読込）。CDN既定では static/ は不要。
