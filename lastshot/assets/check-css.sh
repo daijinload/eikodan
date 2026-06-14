@@ -7,10 +7,10 @@
 #   2) semgrep                       … パージで黙って消える危険パターンを静的検出。
 # どちらかが落ちたら非ゼロ終了する（手動ゲート / CI にそのまま使える）。
 #
-# 使い方:  bash assets/check-css.sh        （fastweb/ 直下・どこからでも可）
+# 使い方:  bash assets/check-css.sh        （lastshot/ 直下・どこからでも可。./run css-check 推奨）
 # 目視確認は通過後に:  CSS=built cargo run -p app   （release往復なし＝再ビルドしない）
 set -euo pipefail
-cd "$(dirname "$0")/.."   # fastweb/ へ
+cd "$(dirname "$0")/.."   # lastshot/ へ
 
 bin=assets/tailwindcss
 in=assets/input.css

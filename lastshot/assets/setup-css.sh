@@ -2,7 +2,7 @@
 # CSSビルド一式（初回だけ）。Node不要 ── Tailwind v4 スタンドアロンCLI + daisyUI v5 の単体ファイルを落とす。
 # これらは .gitignore 済み（プラットフォーム依存バイナリ + リリース成果物）。
 #
-# 使い方:  bash assets/setup-css.sh   (リポジトリ直下=fastweb/ で実行)
+# 使い方:  bash assets/setup-css.sh   (lastshot/ 直下で実行。./run css-setup 推奨)
 set -euo pipefail
 cd "$(dirname "$0")"   # assets/ に移動
 
