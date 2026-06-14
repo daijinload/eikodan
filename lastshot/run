@@ -23,13 +23,13 @@ PG_HOST=/tmp
 #   dan2          → PORT=3002 / DB=lastshot_dan2
 # dev も compose も同じ機構で動かす(PORT=待受/公開ポート, PGDATABASE=DB名, プロジェクト名)。
 # 各値は外から渡せば優先(例: PORT=3009 ./run dev)。
-_wt=$(basename "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)")  # 例: dan2 / eikodan
-_slot=$(printf '%s' "$_wt" | grep -oE '[0-9]+$' || true)           # 末尾数字 → 1,2,… 無ければ空
-PG_DB=${PG_DB:-lastshot${_slot:+_dan$_slot}}                       # 無し→lastshot / dan2→lastshot_dan2
-export PGDATABASE="$PG_DB"                  # dev: db::connect() が読む / psql・createdb も拾う
-export PORT="${PORT:-$((3000 + 10#${_slot:-0}))}"                  # dev: main.rs / compose: 公開ポート
-export BASE_URL="${BASE_URL:-http://127.0.0.1:$PORT}"            # tests-http の接続先
-export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-lastshot${_slot:+_dan$_slot}}"  # compose 名衝突回避
+_wt=$(basename "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)")                  # 例: dan2 / eikodan
+_slot=$(printf '%s' "$_wt" | grep -oE '[0-9]+$' || true)                            # 末尾数字 → 1,2,… 無ければ空
+PG_DB=${PG_DB:-lastshot${_slot:+_dan$_slot}}                                        # 無し→lastshot / dan2→lastshot_dan2
+export PGDATABASE="$PG_DB"                                                          # dev: db::connect() が読む / psql・createdb も拾う
+export PORT="${PORT:-$((3000 + 10#${_slot:-0}))}"                                   # dev: main.rs / compose: 公開ポート
+export BASE_URL="${BASE_URL:-http://127.0.0.1:$PORT}"                               # tests-http の接続先
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-lastshot${_slot:+_dan$_slot}}" # compose 名衝突回避
 
 # migrations は Flyway で管理する。CLI/JRE はローカルに入れず docker image で実行する
 # （compose / CI と同じ版）。tag は docker hub の最新メジャーに追従。
@@ -39,30 +39,37 @@ FLYWAY_IMAGE=flyway/flyway:12-alpine
 # 文字列メンバーシップで 3.2/POSIX でも動くようにする(task-runners/bash/run 由来)。
 _done=" "
 once() {
-  { _x=$-; set +x; } 2>/dev/null
-  case "$_done" in *" $1 "*) case "$_x" in *x*) set -x;; esac; return 0;; esac
+  {
+    _x=$-
+    set +x
+  } 2>/dev/null
+  case "$_done" in *" $1 "*)
+    case "$_x" in *x*) set -x ;; esac
+    return 0
+    ;;
+  esac
   _done="$_done$1 "
-  case "$_x" in *x*) set -x;; esac
+  case "$_x" in *x*) set -x ;; esac
   "$1"
 }
 
-dev() {              # 開発サーバ起動(cargo run -p app / DB必須)
+dev() { # 開発サーバ起動(cargo run -p app / DB必須)
   cargo run -p app
 }
 
-check() {            # 型チェック(cargo check --workspace)
+check() { # 型チェック(cargo check --workspace)
   cargo check --workspace
 }
 
-watch() {            # 保存で再チェック・再起動(bacon)
+watch() { # 保存で再チェック・再起動(bacon)
   bacon
 }
 
-db-start() {         # ネイティブPostgres起動(ログイン常駐にしない=run)
+db-start() { # ネイティブPostgres起動(ログイン常駐にしない=run)
   brew services run postgresql@17
 }
 
-db-stop() {          # Postgres停止
+db-stop() { # Postgres停止
   brew services stop postgresql@17
 }
 
@@ -76,6 +83,9 @@ db-stop() {          # Postgres停止
 _flyway() {
   local net_arg=""
   if [ -n "${FLYWAY_NETWORK:-}" ]; then net_arg="--network=${FLYWAY_NETWORK}"; fi
+  # net_arg は空なら「引数なし」、設定時のみ --network=... の1個。クォートすると空文字が
+  # 1引数として docker に渡ってしまうので、意図的に非クォート（SC2086 を無効化）。
+  # shellcheck disable=SC2086
   docker run --rm ${net_arg} \
     -v "$PWD/migrations:/flyway/sql:ro" \
     -v "$PWD/flyway.toml:/flyway/conf/flyway.toml:ro" \
@@ -85,71 +95,92 @@ _flyway() {
     "$FLYWAY_IMAGE" -configFiles=/flyway/conf/flyway.toml -connectRetries=60 "$@"
 }
 
-db-migrate() {       # Flywayでmigrationsを適用(docker / native DBへ host.docker.internal 経由)
+db-migrate() { # Flywayでmigrationsを適用(docker / native DBへ host.docker.internal 経由)
   _flyway migrate
 }
 
-db-info() {          # 適用状況を表示(flyway info)
+db-info() { # 適用状況を表示(flyway info)
   _flyway info
 }
 
-db-setup() {         # DB作成 + Flyway migrate(冪等。何度流してもよい)
+db-setup() { # DB作成 + Flyway migrate(冪等。何度流してもよい)
   "$PGBIN/createdb" -h "$PG_HOST" "$PG_DB" 2>/dev/null || true
   db-migrate
 }
 
-db-reset() {         # DBを作り直す(スキーマもカウント値もまっさらに作り直し)
+db-reset() { # DBを作り直す(スキーマもカウント値もまっさらに作り直し)
   "$PGBIN/dropdb" -h "$PG_HOST" --if-exists "$PG_DB"
   db-setup
 }
 
-css-setup() {        # Tailwind CLI + daisyUI を取得(初回のみ)
+css-setup() { # Tailwind CLI + daisyUI を取得(初回のみ)
   bash assets/setup-css.sh
 }
 
-css-check() {        # 本番CSSをクリーン生成し semgrep でパージ検査(push前ゲート)
+css-check() { # 本番CSSをクリーン生成し semgrep でパージ検査(push前ゲート)
   bash assets/check-css.sh
 }
 
-test-http() {        # 起動済みサーバへHTTPブラックボックステスト(別ワークスペース)
-  ( cd tests-http && cargo nextest run )
+lint-setup() { # lint/fmtツール取得(初回のみ: oxfmtをローカル固定 ほか確認)
+  bash lint/setup.sh
 }
 
-browser-setup() {    # ブラウザテストの依存取得(初回のみ: npm + Chromium)
-  ( cd browser && npm install && npx playwright install chromium )
+lint() { # fmt/lint通しゲート(読取専用/push前に手動。詳細 lint/README.md)
+  bash lint/check.sh
 }
 
-browser() {          # ブラウザ駆動テスト(Playwright / 要・起動済みサーバ)
-  [ -d browser/node_modules ] || { echo "依存が未取得: ./run browser-setup を先に実行"; return 1; }
-  ( cd browser && npm test )
+fmt() { # push前の一括整形(書込/lintの対。dev中はcargo fmt -p <crate>で個別に)
+  bash lint/fmt.sh
 }
 
-test() {             # まとめてテスト(http +(あれば)browser)
+test-http() { # 起動済みサーバへHTTPブラックボックステスト(別ワークスペース)
+  (cd tests-http && cargo nextest run)
+}
+
+browser-setup() { # ブラウザテストの依存取得(初回のみ: npm + Chromium)
+  (cd browser && npm install && npx playwright install chromium)
+}
+
+browser() { # ブラウザ駆動テスト(Playwright / 要・起動済みサーバ)
+  [ -d browser/node_modules ] || {
+    echo "依存が未取得: ./run browser-setup を先に実行"
+    return 1
+  }
+  (cd browser && npm test)
+}
+
+test() { # まとめてテスト(http +(あれば)browser)
   once test-http
   [ -d browser ] && once browser || true
 }
 
-up() {               # 結合用に app+pg を compose で起動(同一網/TCP接続)
+up() { # 結合用に app+pg を compose で起動(同一網/TCP接続)
   docker compose up --build
 }
 
-down() {             # compose を即停止(SIGKILL / 使い捨て前提)
+down() { # compose を即停止(SIGKILL / 使い捨て前提)
   docker compose down -t 0
 }
 
-help() {             # タスク一覧
+help() { # タスク一覧
   echo "usage: ./run <task> [args]"
   echo "tasks:"
-  grep -E '^[a-z][a-z_-]*\(\) +\{ +#' "$0" \
-    | sed -E 's/\(\) +\{ +# */\t/' | sort | sed 's/^/  /'
+  grep -E '^[a-z][a-z_-]*\(\) +\{ +#' "$0" |
+    sed -E 's/\(\) +\{ +# */\t/' | sort | sed 's/^/  /'
 }
 
 # 実行するコマンドを + 付き(展開済み)で表示する(既定ON)。-q または Q=1 で抑止。
 _trace=1
 [ "${Q:-0}" = 1 ] && _trace=0
-[ "${1:-}" = "-q" ] && { shift; _trace=0; }
-[ "${1:-help}" = "help" ] && _trace=0          # 一覧(help)はトレースしない
-[ "$_trace" = 1 ] && { PS4='+ '; set -x; }
+[ "${1:-}" = "-q" ] && {
+  shift
+  _trace=0
+}
+[ "${1:-help}" = "help" ] && _trace=0 # 一覧(help)はトレースしない
+[ "$_trace" = 1 ] && {
+  PS4='+ '
+  set -x
+}
 
 # ディスパッチ: 引数が無ければ help、あれば $1 と同名の関数を実行
 "${@:-help}"

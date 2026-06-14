@@ -1,6 +1,7 @@
 # lastshot — AIエージェント運用ルール
 
 `eikodan` の各サブプロジェクトの結論を統合した本番実装。土台は2つ:
+
 - **[fastweb](../fastweb/CLAUDE.md)** = ビルド回避 + package by feature（ノービルド開発の掟）
 - **[connectweb](../connectweb/CLAUDE.md)** = スキーマファースト（.proto 単一真実の掟）
 
@@ -66,8 +67,11 @@
 
 ## ビルド/codegen を増やさないための禁止事項（fastweb から継承）
 
-- **触る機能のフォルダ以外に書き込まない。** 全ファイルへのフォーマッタ一括適用、workspace 共通 `Cargo.toml`
-  （`[workspace.dependencies]` / プロファイル）の不用意な変更は全クレート再ビルドを誘発するので禁止。
+- **触る機能のフォルダ以外に書き込まない。** workspace 共通 `Cargo.toml`（`[workspace.dependencies]` /
+  プロファイル）の不用意な変更は全クレート再ビルドを誘発するので禁止。**フォーマッタは dev ループ中は触った
+  クレートだけ**に当てる（`cargo fmt -p <crate>`。全クレート一括は触っていないクレートまで再ビルドさせるため避ける）。
+  **push 前の最終確認では `./run fmt` で一括整形してよい**（どうせ全体をビルドするので相乗り。`cargo fmt` は
+  差分のあるファイルだけ書き戻す＝整形済みは再ビルドされない）。lint/fmt の配線は [`lint/`](./lint/)。
 - **UIの変更はテンプレートとCSSで完結させる。** Rust に触るのはデータ取得の形が変わるときだけ。HTMLはRustに書かず
   テンプレに置く（`assets/input.css` は `source(none)` でテンプレHTMLだけを走査対象にしている）。
 - **Tailwind のクラス名は常に完全形で書く。** `text-{{ color }}-500` のような動的合成は禁止（CLIパージで本番だけ消える。

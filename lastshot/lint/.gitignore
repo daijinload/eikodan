@@ -1,0 +1,2 @@
+# oxfmt を node ごとローカル固定（setup.sh が取得。napi 製で node が要る開発専用ツール）
+.lint-tools/
