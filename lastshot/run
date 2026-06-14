@@ -84,13 +84,11 @@ test() {             # まとめてテスト(http +(あれば)browser)
   [ -d browser ] && once browser || true
 }
 
-up() {               # 結合用に app+pg を compose で起動(M3 で追加予定)
-  [ -f compose.yml ] || { echo "compose.yml はまだ無い(M3 で追加予定)"; return 1; }
+up() {               # 結合用に app+pg を compose で起動(同一網/TCP接続)
   docker compose up --build
 }
 
 down() {             # compose を即停止(SIGKILL / 使い捨て前提)
-  [ -f compose.yml ] || { echo "compose.yml はまだ無い(M3 で追加予定)"; return 1; }
   docker compose down -t 0
 }
 

@@ -85,7 +85,11 @@ async fn main() {
                 .ok()
                 .and_then(|p| p.parse::<u16>().ok())
                 .unwrap_or(3000);
-            tokio::net::TcpListener::bind(("127.0.0.1", port))
+            // 既定 127.0.0.1（dev は外部公開しない）。コンテナ（compose/CI）では HOST=0.0.0.0 を
+            // 渡して公開ポート/他サービスから到達できるようにする（127.0.0.1 だとコンテナ内 loopback
+            // 止まりで、ポートフォワードされた外部トラフィックが届かない）。
+            let host = std::env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
+            tokio::net::TcpListener::bind(format!("{host}:{port}").as_str())
                 .await
                 .unwrap()
         }

@@ -1,0 +1,20 @@
+# ビルド成果物・依存（ビルドコンテキストを軽くし、ホスト由来物の混入を防ぐ）。
+target/
+**/target/
+node_modules/
+**/node_modules/
+.git/
+
+# ブラウザテストの出力
+browser/test-results/
+browser/playwright-report/
+browser/blob-report/
+
+# CSSビルド一式（ホストは macOS バイナリ。builder 内で Linux 版を取り直す）
+assets/tailwindcss
+assets/daisyui.mjs
+assets/daisyui-theme.mjs
+crates/app/static/app.css
+
+# ローカル env
+.env

@@ -1,0 +1,116 @@
+# lastshot の CI。GitHub は「リポジトリ直下の .github/workflows/」しか実行しないため、
+# monorepo（eikodan）では lastshot/.github/ ではなくここに置く（lastshot/** だけを対象に path フィルタ）。
+#
+# 何をするか（ローカルの ./run と同じことを Linux ネイティブで一気通し）:
+#   build(release) → CSSゲート(Tailwind purge + semgrep) → 起動 → HTTP黒箱(test-http) → ブラウザE2E
+# DB は GitHub の postgres サービス（TCP）。dev機向け最適化（sccache/mold/-Zthreads）は
+# 追加ツール無しの素ビルドにするため env で無効化（実測確認済み: RUSTFLAGS="" が .cargo/config.toml の
+# target rustflags を置換、CARGO_BUILD_RUSTC_WRAPPER="" が sccache を無効化）。
+#
+# 注: compose分割 vs 全部入りsingle の「CI環境比較」は最終形態の計測フェーズに保留中（container-ops.md）。
+#     ここではまず「ネイティブで緑になる CI」を1本通す。
+name: lastshot CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "lastshot/**"
+      - ".github/workflows/lastshot-ci.yml"
+  pull_request:
+    paths:
+      - "lastshot/**"
+      - ".github/workflows/lastshot-ci.yml"
+
+# 同一参照の古い実行はキャンセルして CI 時間を節約。
+concurrency:
+  group: lastshot-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: lastshot
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: lastshot
+          POSTGRES_PASSWORD: lastshot
+          POSTGRES_DB: lastshot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lastshot -d lastshot"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    env:
+      # 本番/CI は TCP（compose 同一網と同じ接続作法）。
+      DATABASE_URL: postgres://lastshot:lastshot@localhost:5432/lastshot
+      # dev機向け最適化を無効化（素ビルド）。
+      RUSTFLAGS: ""
+      CARGO_BUILD_RUSTC_WRAPPER: ""
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install protoc + psql client + semgrep
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends protobuf-compiler postgresql-client
+          pipx install semgrep
+
+      - name: Install Rust nightly (rust-toolchain.toml に合わせる)
+        run: rustup toolchain install nightly --component rust-src --profile minimal
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Cache cargo + target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            lastshot
+            lastshot/tests-http
+
+      - name: Apply migrations
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/schema.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/seed.sql
+
+      - name: Build app (release)
+        run: cargo build --release -p app
+
+      - name: CSS gate (Tailwind purge build + semgrep)
+        run: |
+          ./run -q css-setup
+          ./run -q css-check
+
+      - name: Start app
+        run: |
+          HOST=127.0.0.1 PORT=3000 nohup ./target/release/app > /tmp/app.log 2>&1 &
+          echo $! > /tmp/app.pid
+
+      - name: Wait for app
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:3000/ >/dev/null; then
+              echo "app is up after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "app did not start:"; cat /tmp/app.log; exit 1
+
+      - name: HTTP black-box tests (tests-http)
+        run: ./run -q test-http
+
+      - name: Browser E2E (Playwright)
+        run: |
+          ./run -q browser-setup
+          ./run -q browser
+
+      - name: Stop app
+        if: always()
+        run: kill "$(cat /tmp/app.pid)" 2>/dev/null || true
