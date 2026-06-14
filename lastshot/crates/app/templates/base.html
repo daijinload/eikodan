@@ -1,25 +1,25 @@
 <!doctype html>
 <html lang="ja" data-theme="light">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- CSSは実行時グローバル css_built で切替（cfg!(debug_assertions) には紐付けない＝往復で再ビルドしない）。
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- CSSは実行時グローバル css_built で切替（cfg!(debug_assertions) には紐付けない＝往復で再ビルドしない）。
        built: CLI生成のパージ済み /static/app.css（release / CSS=built）。
        それ以外: CDN（ブラウザJITでビルドゼロの日常開発）。バージョンは固定しCDNとCLIで揃える。 -->
-  {% if css_built %}
-  <link rel="stylesheet" href="/static/app.css" />
-  {% else %}
-  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
-  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-  {% endif %}
-  <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.10/dist/htmx.min.js"
-          integrity="sha384-H5SrcfygHmAuTDZphMHqBJLc3FhssKjG7w/CeCpFReSfwBWDTKpkzPP8c+cLsK+V"
-          crossorigin="anonymous"></script>
-  <title>{% block title %}lastshot{% endblock %}</title>
-</head>
-<body class="p-6 bg-base-200 min-h-screen">
-  <div class="max-w-3xl mx-auto">
-    {% block content %}{% endblock %}
-  </div>
-</body>
+    {% if css_built %}
+    <link rel="stylesheet" href="/static/app.css" />
+    {% else %}
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    {% endif %}
+    <script
+      src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.10/dist/htmx.min.js"
+      integrity="sha384-H5SrcfygHmAuTDZphMHqBJLc3FhssKjG7w/CeCpFReSfwBWDTKpkzPP8c+cLsK+V"
+      crossorigin="anonymous"
+    ></script>
+    <title>{% block title %}lastshot{% endblock %}</title>
+  </head>
+  <body class="bg-base-200 min-h-screen p-6">
+    <div class="mx-auto max-w-3xl">{% block content %}{% endblock %}</div>
+  </body>
 </html>

@@ -6,10 +6,12 @@
 //! （`rpc` クレート）も**同じ関数**を呼ぶ。値は Postgres の `counter` テーブル（1行）に
 //! 永続化するので、プロセスを再起動しても残る。
 
-use axum::extract::State;
-use axum::response::Html;
-use axum::routing::{get, post};
-use axum::Router;
+use axum::{
+    extract::State,
+    response::Html,
+    routing::{get, post},
+    Router,
+};
 use db::{PgPool, Row};
 use schema::CounterView;
 use webcore::AppState;

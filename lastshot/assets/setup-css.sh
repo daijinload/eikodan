@@ -4,16 +4,20 @@
 #
 # 使い方:  bash assets/setup-css.sh   (lastshot/ 直下で実行。./run css-setup 推奨)
 set -euo pipefail
-cd "$(dirname "$0")"   # assets/ に移動
+cd "$(dirname "$0")" # assets/ に移動
 
 # OS/Arch に合う Tailwind バイナリ名を決める
-uname_s="$(uname -s)"; uname_m="$(uname -m)"
+uname_s="$(uname -s)"
+uname_m="$(uname -m)"
 case "$uname_s/$uname_m" in
   Darwin/arm64) bin="tailwindcss-macos-arm64" ;;
   Darwin/x86_64) bin="tailwindcss-macos-x64" ;;
   Linux/aarch64) bin="tailwindcss-linux-arm64" ;;
   Linux/x86_64) bin="tailwindcss-linux-x64" ;;
-  *) echo "unsupported platform: $uname_s/$uname_m" >&2; exit 1 ;;
+  *)
+    echo "unsupported platform: $uname_s/$uname_m" >&2
+    exit 1
+    ;;
 esac
 
 echo "downloading $bin ..."

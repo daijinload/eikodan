@@ -3,7 +3,14 @@ cargo-features = ["codegen-backend"]
 
 [workspace]
 resolver = "2"
-members = ["crates/app", "crates/webcore", "crates/schema", "crates/db", "crates/feature-counter", "crates/rpc"]
+members = [
+  "crates/app",
+  "crates/webcore",
+  "crates/schema",
+  "crates/db",
+  "crates/feature-counter",
+  "crates/rpc",
+]
 
 # 依存はここで一元管理する。featureクレートはここを編集しないこと
 # （ワークスペース共通Cargo.tomlの変更は全クレート再ビルドを誘発するため）。
@@ -28,10 +35,10 @@ serde_json = "1"
 # ───────────────────────────────────────────────────────────
 [profile.dev]
 opt-level = 0
-debug = false            # debuginfo生成を省いてコンパイル・リンクを短縮
-                         # （panicのfile:lineが欲しければ "line-tables-only" に）
-codegen-backend = "cranelift"  # 自分のコードは Cranelift で高速コード生成
+debug = false # debuginfo生成を省いてコンパイル・リンクを短縮
+# （panicのfile:lineが欲しければ "line-tables-only" に）
+codegen-backend = "cranelift" # 自分のコードは Cranelift で高速コード生成
 
 [profile.dev.package."*"]
 opt-level = 3
-codegen-backend = "llvm"       # 依存は LLVM で最適化（初回のみのコスト）
+codegen-backend = "llvm" # 依存は LLVM で最適化（初回のみのコスト）

@@ -10,11 +10,8 @@
 //! `sqlx` を `pub use` で再公開しているので、利用側(feature クレート)は自分の
 //! Cargo.toml に sqlx を書かず `db::sqlx::query(...)` / `db::Row` で使える。
 
-pub use sqlx;
-pub use sqlx::postgres::PgPool;
-pub use sqlx::Row;
-
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
+pub use sqlx::{self, postgres::PgPool, Row};
 
 /// 接続プールを作る。
 ///
