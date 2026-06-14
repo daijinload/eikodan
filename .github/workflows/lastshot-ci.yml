@@ -59,21 +59,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # semgrep だけが「重い非キャッシュ依存」(~20s の wheel DL)。ここだけ pip cache を足す。
-      # apt(protoc/psql)・npm・Playwright は payload が小さく restore で相殺なので入れない
-      # (= 少数の太いキャッシュが鉄則)。key は arch + 版で分離(ARM/x86 別物・版上げで自動更新)。
-      # pipx は内部で pip を使い ~/.cache/pip を共有するので、ヒット時は wheel を再DLしない。
-      - name: Cache pip (semgrep wheel)
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: pip-semgrep-${{ runner.arch }}-1.166.0
-
       - name: Install protoc + psql client + semgrep
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends protobuf-compiler postgresql-client
-          pipx install semgrep==1.166.0
+          # semgrep は uv で入れる。実機ベンチ(ARM)で pipx ~16s に対し uv は ~2s だった。
+          # 速さの正体は wheel DL ではなく venv 展開で、pipx はそこが遅い(= pip cache では
+          # 縮まない/実測 cold17s→warm16s)。uv(Rust製・並列・hardlink)は素で速く、キャッシュ不要。
+          # semgrep の scan は --config assets/semgrep のローカルルールなので実行時 DL も無い。
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          export PATH="$HOME/.local/bin:$PATH"
+          uv tool install semgrep==1.166.0
 
       - name: Install Rust nightly (rust-toolchain.toml に合わせる)
         run: rustup toolchain install nightly --component rust-src --profile minimal
