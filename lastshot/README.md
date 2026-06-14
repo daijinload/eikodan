@@ -224,7 +224,10 @@ cd ../dan2/lastshot   # 例: dan2 worktree へ
   起動順は postgres(healthy) → flyway(migrate して exit) → app（app は `service_completed_successfully` を待つ）。
   接続は本番/CI と同じ `DATABASE_URL` の TCP。データボリュームは持たない（使い捨て＝down で消え、up で
   flyway が migrations を流し直す）。コンテナは dev 機向け最適化（sccache/mold/-Zthreads）を env で無効化した
-  素ビルド（追加ツール不要・nightly + protoc のみ）。
+  素ビルド（追加ツール不要・stable + protoc のみ）。**dev=nightly / 本番=stable**: Dockerfile が
+  `RUSTUP_TOOLCHAIN=stable` で rust-toolchain.toml(nightly) を上書きし、`assets/strip-nightly.sh` で
+  Cargo.toml の nightly 専用行（`cargo-features`/`codegen-backend`）を剥がして stable でビルドする
+  （nightly フラグはこの構造ではビルド速度にほぼ寄与せず、本番は再現性重視で stable に倒す）。
 - CI: `.github/workflows/lastshot-ci.yml`（**リポジトリ直下**。GitHub は monorepo でも root の
   `.github/workflows/` しか実行しないため。`lastshot/**` だけを対象に path フィルタ）。中身は
   build(release) → CSSゲート → 起動 → `test-http` → ブラウザE2E をネイティブで一気通し。migration は
@@ -267,7 +270,7 @@ lastshot/
   Cargo.toml           workspace（opt非対称 / Cranelift）
   bacon.toml           check / run / serve
   rustfmt.toml         Rust 整形ルール（直下に置く唯一の lint 設定 = cargo fmt の自動探索アンカー）
-  assets/              CSSゲート（input.css / setup-css.sh / check-css.sh / semgrep/）
+  assets/              CSSゲート（input.css / setup-css.sh / check-css.sh / semgrep/）+ strip-nightly.sh（本番stable化）
   lint/                fmt/lint ゲート（setup.sh / check.sh / fmt.sh / .oxfmtrc.json / .sqlfluff）。proto の buf.yaml は schema 側に同居
   migrations/          Flyway versioned migrations（V<timestamp>__<desc>.sql / 連番でなくタイムスタンプ版数）
   flyway.toml          Flyway 挙動設定（outOfOrder=true / validateMigrationNaming=true / locations）
@@ -280,10 +283,12 @@ lastshot/
     rpc/               Connect API の薄い殻。service層を呼んで同じ CounterView を返す
   tests-http/          起動済みサーバを HTTP で叩くブラックボックステスト（ワークスペース外）
   browser/             ブラウザ駆動E2E（Playwright / HTMX swap・view-data・API の一致検証 / ワークスペース外）
-  Dockerfile           app の release イメージ（本番CSS入り / 素ビルド）
+  Dockerfile           app の release イメージ（本番CSS入り / 素ビルド / 本番=stable。strip-nightly.sh 同梱）
   compose.yml          app + postgres + flyway 同一網（TCP接続 / 使い捨て / app は flyway 完了を待つ）
   （CI は monorepo 直下の ../.github/workflows/lastshot-ci.yml。GitHub は root の .github しか実行しないため）
 ```
 
 高速化フラグの位置は fastweb と同じ（リンカ/threads/sccache=`.cargo/config.toml`、nightly=`rust-toolchain.toml`、
-opt非対称/Cranelift=`Cargo.toml`）。実測根拠は [`fastweb/BENCHMARK.md`](../fastweb/BENCHMARK.md)。
+opt非対称/Cranelift=`Cargo.toml`）。これらは **dev(nightly) 向け**で、**本番(Docker)は stable で焼く**
+（`RUSTUP_TOOLCHAIN=stable` + `assets/strip-nightly.sh`。上記「結合・本番ビルド」参照）。
+実測根拠は [`fastweb/BENCHMARK.md`](../fastweb/BENCHMARK.md)。
