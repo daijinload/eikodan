@@ -12,7 +12,8 @@
 1. **テンプレ・CSS・HTMX属性の変更** → 保存で即反映（Rustビルドゼロ。作業の7〜8割）。
 2. **ハンドラ・サービス層（get_count/increment 等）の変更** → 該当 feature クレートだけ数秒で再ビルド。
 3. **スキーマ（.proto）の変更** → `schema` クレートで codegen が走る（proto を触ったときだけ）。
-4. **DB スキーマ（migrations）の変更** → `./run db-reset` か `db-setup` を流す（Rustビルドには影響しない）。
+4. **DB スキーマ（migrations）の変更** → `migrations/` に `V<timestamp>__*.sql` を足して `./run db-migrate`
+   （まっさらに作り直すなら `./run db-reset`）。Flyway が適用するので Rustビルドには影響しない。
 
 動的言語・スクリプト層は足さない。Rust の型チェックを品質担保装置として全面的に残す。
 
@@ -41,7 +42,18 @@
   TCP（compose 同一網）に上書き。`db::connect()` がこの分岐を持つ。dev の database 名は `PGDATABASE`
   で上書き可（既定 `lastshot`）。`./run` が worktree 名からスロットを決めて `PORT`/`PGDATABASE`/
   `COMPOSE_PROJECT_NAME` を export し、dan1〜dan4 を並列起動しても衝突しない（README「worktree 並列起動」）。
-- **migrations は `migrations/schema.sql` + `seed.sql`**（`psql -f`、冪等）。マイグレーションフレームワークは入れない。
+- **migrations は Flyway で管理する**（docker image `flyway/flyway` で実行 ── ローカルに JRE/CLI は入れない）。
+  ファイルは `migrations/V<version>__<desc>.sql`（区切りは `__` 2個）。版数は連番(`V1`,`V2`..)ではなく
+  `yyyyMMddHHmmss` の**タイムスタンプ**にする＝ブランチ並行時の版数衝突を避けるため
+  （例: `V20260614153000__add_users_index.sql`）。挙動は `flyway.toml` に固定:
+  `outOfOrder=true`（タイムスタンプが前後しても適用＝連番前提の「順番どおりでないとエラー」を回避）、
+  `validateMigrationNaming=true`（命名ミスを fail-fast）。versioned migration は素の DDL を書く
+  （一度しか走らないので `if not exists` 等の冪等ガードは付けない）。
+- **migrations の適用**: native=`./run db-migrate`（`host.docker.internal` 経由で native postgres へ。
+  DB名は worktree スロットの `$PG_DB` を使うので分離と両立）、compose/CI=`flyway` サービス / CI ステップ
+  （app は `service_completed_successfully` を待つので必ず適用後に起動）。DB は使い捨て前提（native は
+  `./run db-reset` で作り直し、compose はボリューム無し）。既存DBに後付けで Flyway を入れる場合は履歴が
+  無く既存テーブルと衝突するので、一度 `./run db-reset` してまっさらにしてから流す。
 
 ## クレート依存の向き（package by feature + schema + db）
 

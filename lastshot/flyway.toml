@@ -1,0 +1,21 @@
+# Flyway 設定（lastshot / docker image `flyway/flyway` で実行 ── ローカルに JRE/CLI は入れない）。
+#
+# ここには「挙動」だけを固定する。接続情報(URL/USER/PASSWORD)は環境ごとに違うので
+# 実行時に env で渡す:
+#   - native dev : ./run db-migrate（host.docker.internal 経由で native postgres へ。DB名は
+#                  worktree スロットに応じた $PG_DB = lastshot / lastshot_danN）
+#   - compose/CI : flyway サービス / CI ステップ（postgres サービスへ）
+#
+# 命名規約は V<version>__<desc>.sql（区切りは __ 2個）。版数は連番(V1,V2..)ではなく
+# yyyyMMddHHmmss のタイムスタンプにして、ブランチ並行時の版数衝突を避ける
+#   例: V20260614153000__add_users_index.sql
+[flyway]
+# マイグレーション SQL の置き場所（docker image 内のマウント先 = ./migrations）。
+locations = ["filesystem:/flyway/sql"]
+
+# タイムスタンプ版数はブランチをまたぐと前後しうる。適用済みより小さい版数が後から
+# 現れても無視せず適用する（連番前提の "順番どおりでないとエラー" を回避）。
+outOfOrder = true
+
+# V<version>__<desc>.sql の命名規約に外れた .sql があれば fail-fast で気付けるようにする。
+validateMigrationNaming = true
