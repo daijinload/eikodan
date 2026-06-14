@@ -1,0 +1,8 @@
+# Rust の整形ルール（cargo fmt）。
+# 下の2つは unstable オプションなので nightly rustfmt が要る
+# （samples/rust/rust-toolchain.toml で nightly に固定している）。
+edition = "2021"
+
+# import を std / 外部crate / 自crate でグループ分けし、クレート単位でまとめる。
+group_imports = "StdExternalCrate"
+imports_granularity = "Crate"

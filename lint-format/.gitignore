@@ -1,0 +1,6 @@
+# lint/fmt ツール（setup-lint.sh が取得。oxfmt を node ごとローカル固定）
+.lint-tools/
+
+# Rust サンプルのビルド成果物 / ロックファイル
+samples/rust/target/
+samples/rust/Cargo.lock

@@ -1,0 +1,5 @@
+# rustfmt.toml の unstable オプション（group_imports / imports_granularity）は
+# nightly rustfmt でのみ有効。サンプル単体で green にするため nightly に固定する。
+[toolchain]
+channel = "nightly"
+components = ["rustfmt", "clippy"]

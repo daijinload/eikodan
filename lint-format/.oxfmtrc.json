@@ -1,0 +1,4 @@
+{
+  "sortTailwindcss": true,
+  "ignorePatterns": [".lint-tools/**", "samples/rust/target/**"]
+}

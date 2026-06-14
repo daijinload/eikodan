@@ -22,6 +22,7 @@
 | [connectweb](./connectweb/) | .proto を単一の真実に、生成型から HTML / JSON / Connect API を駆動 |
 | [pg-bench](./pg-bench/) | 「最速 Postgres をメモリに書く」を実効速度で横並び比較するベンチ |
 | [playwright-sample](./playwright-sample/) | Microsoft Playwright の E2E テストサンプル（Playwright MCP は評価のうえ不採用。比較は同 README） |
+| [lint-format](./lint-format/) | lint/format ツールを種別ごとのサンプルで実演する showcase（rustfmt・clippy・oxfmt・buf・shfmt/shellcheck） |
 
 ## agent-browser のインストール
 
