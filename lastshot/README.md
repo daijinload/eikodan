@@ -48,7 +48,8 @@ brew install protobuf     # schema/build.rs の codegen が protoc を使う
 # 3) Postgres（ネイティブ＝開発の既定。pg-bench の結論で unix ソケット最速）
 brew install postgresql@17
 # 4) bash 5.x 推奨（macOS 既定の 3.2 でも ./run は動くが 5.x が望ましい）→ ../bash-setup.md
-# 5) CSS ゲート用バイナリ（最終確認のときだけ。日常はCDNなので不要）
+# 5) CSS ゲート用（最終確認のときだけ。日常はCDNなので不要）
+uv tool install semgrep   # css-check の semgrep（CIと同手段。uv未導入なら brew install semgrep）
 ./run css-setup           # Tailwind CLI + daisyUI を assets/ に取得（.gitignore 済み）
 ```
 
@@ -172,6 +173,24 @@ cd ../dan2/lastshot   # 例: dan2 worktree へ
   build(release) → CSSゲート → 起動 → `test-http` → ブラウザE2E をネイティブで一気通し。
 - 「compose分割 vs 全部入りsingle」の CI環境比較は計測フェーズに保留中（[`../container-ops.md`](../container-ops.md)）。
   まずは「緑になる CI を1本」通す段階。
+
+### CI の高速化方針（ARM 実機計測で取捨選択）
+
+runner は `ubuntu-24.04-arm`（ローカル Apple Silicon・arm64 Docker と**アーキ一致**。public repo で無料）。
+setup 区間は**推測せず ARM 実機ベンチで効果を測って**取捨選択した:
+
+- **採用**: semgrep を `pipx`→`uv tool install`（導入 ~16s→~2.5s）/ `apt-get update` 省略（失敗時のみ
+  update→retry で自己回復）/ postgres `17`→`17-alpine`（コンテナ初期化 ~13s→~9s）。
+- **本命キャッシュは `Swatinem/rust-cache`（cargo+target, build ~76s→~15s）の1個だけ**。`nextest` も
+  `taiki-e/install-action` で導入済みキャッシュ。
+- **足さないと決めたキャッシュ（実機で逆効果/無駄と確認）**: semgrep の pip cache（重さは wheel DL でなく
+  venv 展開なので pip cache では縮まない＝uv で解決）/ pipx venv cache（warm でも当たらない）/
+  **rustup toolchain cache（保存48s ≫ 復元4s、巨大で rust-cache の 10GB 枠を圧迫）** / Playwright・npm・apt
+  cache（payload 小で restore 相殺）。
+- 原則: **「少数の太いキャッシュ」だけ**。細かいキャッシュは restore/保存コストで相殺〜逆効果になる。
+- 総 CI 時間は約2分で **x86 時とほぼ同等**（大半が arch 非依存の apt/コンテナ初期化/build/test と run毎の
+  ばらつき）。ARM 化の主目的は速度ではなく**ローカルとのアーキ一致**。semgrep の scan は
+  `--config assets/semgrep` のローカルルールで実行時のレジストリ DL は無い（ローカル実測 0.9s）。
 
 ## 構成
 
