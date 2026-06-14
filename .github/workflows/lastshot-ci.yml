@@ -21,6 +21,9 @@ on:
     paths:
       - "lastshot/**"
       - ".github/workflows/lastshot-ci.yml"
+  # 手動で単発実行（Actions タブの "Run workflow" / gh workflow run）。
+  # path フィルタに関係なく任意ブランチで CI を回せる。
+  workflow_dispatch:
 
 # 同一参照の古い実行はキャンセルして CI 時間を節約。
 concurrency:
