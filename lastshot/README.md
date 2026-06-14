@@ -82,9 +82,13 @@ curl -X POST http://127.0.0.1:3000/counter.v1.CounterService/Increment \
 3. **スキーマ（.proto）** → `schema` クレートで codegen が走る（proto を触ったときだけ）。
 
 ```sh
-./run watch               # bacon: 保存で check → 再ビルド → 再起動（ソケット維持）
+./run watch               # bacon（既定=check）: 保存で型チェックを回す。サーバ起動/再起動はしない
+./run dev                 # サーバ起動（保存後に手で叩き直す）。bacon run/serve で再起動運用も可
 ./run check               # cargo check --workspace（型エラーを最速で拾う）
 ```
+
+> Rust 変更の反映は再ビルド + プロセス再起動で約1秒（体感の端から端は ~1.2〜1.3s）。
+> cold start の正体・短縮策（codesign / systemfd / リンカ）の実測は [`COLD-START.md`](./COLD-START.md)。
 
 ## CSS（日常はCDN・最終確認だけビルド）
 
