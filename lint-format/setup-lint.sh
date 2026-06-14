@@ -5,6 +5,7 @@
 #                      .lint-tools（.gitignore済み）にローカル固定インストールする。
 #   buf              … proto の lint / format（単一バイナリ）
 #   shfmt/shellcheck … shell の format / lint（単一バイナリ）
+#   sqlfluff         … SQL の lint / format（Python製。brew が依存ごと配布）
 #
 # 使い方:  bash setup-lint.sh   (lint-format/ 直下・どこからでも可)
 set -euo pipefail
@@ -25,9 +26,9 @@ fi
 npm install --prefix .lint-tools "oxfmt@${OXFMT_VERSION}" --no-audit --no-fund
 .lint-tools/node_modules/.bin/oxfmt --version
 
-echo "==> buf / shfmt / shellcheck（単一バイナリ）"
+echo "==> buf / shfmt / shellcheck / sqlfluff（brew 配布）"
 missing=()
-for t in buf shfmt shellcheck; do
+for t in buf shfmt shellcheck sqlfluff; do
   command -v "$t" >/dev/null 2>&1 || missing+=("$t")
 done
 if [[ ${#missing[@]} -gt 0 ]]; then
@@ -38,6 +39,7 @@ if [[ ${#missing[@]} -gt 0 ]]; then
     echo "  buf:        https://buf.build/docs/installation" >&2
     echo "  shfmt:      https://github.com/mvdan/sh#shfmt" >&2
     echo "  shellcheck: https://github.com/koalaman/shellcheck#installing" >&2
+    echo "  sqlfluff:   https://docs.sqlfluff.com/ (or: pipx install sqlfluff)" >&2
     exit 1
   fi
 fi
