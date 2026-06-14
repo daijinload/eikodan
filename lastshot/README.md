@@ -234,7 +234,7 @@ cd ../dan2/lastshot   # 例: dan2 worktree へ
 
 ### CI の高速化方針（ARM 実機計測で取捨選択）
 
-> **測り方・実数・採否理由の詳細は [`CI-PERF.md`](./CI-PERF.md)**（調査ログ）。ここは要約。
+> **測り方・実数・採否理由の詳細は [`CI-PERFORMANCE.md`](./CI-PERFORMANCE.md)**（調査ログ）。ここは要約。
 
 runner は `ubuntu-24.04-arm`（ローカル Apple Silicon・arm64 Docker と**アーキ一致**。public repo で無料）。
 setup 区間は**推測せず ARM 実機ベンチで効果を測って**取捨選択した:
