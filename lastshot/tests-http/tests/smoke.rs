@@ -86,10 +86,12 @@ async fn connect_increment_advances_value() {
     // proto3 JSON では value=0 が省略され得るので、欠落は 0 とみなす。
     let before_v = before["value"].as_i64().unwrap_or(0);
     let after_v = after["value"].as_i64().unwrap_or(0);
-    assert_eq!(
-        after_v,
-        before_v + 1,
-        "Increment は現在値 + 1 を返すはず（DB に永続化されている証拠）"
+    // nextest は各テストを並列実行し、複数テストが同じ DB の同じ行を increment する。
+    // 他テストの increment が GetCount と Increment の間に挟まると after は +2 以上になり得るので、
+    // 「厳密に +1」ではなく「GetCount より増えている」(increment しか無いので単調増加)で永続化を検証する。
+    assert!(
+        after_v > before_v,
+        "Increment は現在値より大きい値を返すはず（DB に永続化されている証拠）: before={before_v}, after={after_v}"
     );
 }
 
