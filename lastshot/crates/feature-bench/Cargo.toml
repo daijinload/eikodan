@@ -1,0 +1,22 @@
+[package]
+name = "feature-bench"
+version = "0.1.0"
+edition = "2021"
+
+# ベンチ専用 feature。Rust(lastshot) vs Node の API 速度比較のためだけに存在する。
+# package by feature の掟どおり「葉」に保つ（依存は webcore / db のみ）。
+# 本番ロジックではないので JSON は proto 生成型でなく serde_json で直接組む
+# （= feature-counter の「service層は CounterView を返す」掟は、このベンチ feature では
+#   あえて緩める。比較対象を Node と完全一致の素朴な JSON にするため）。
+[dependencies]
+webcore = { path = "../webcore" }
+db = { path = "../db" }
+axum = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+# ベンチ専用の例外: パイプライン比較のためだけに生ドライバ tokio-postgres を直接使う。
+# 本来 DB アクセスは db クレート(sqlx)に閉じる掟だが、(1)これはベンチ計測専用、
+# (2)共有 db クレートに足すと全 feature の依存/ビルド時間が増える(fastweb の肝に反する)ため、
+# あえてこの葉クレートに隔離する。本番ロジックでは決して真似しないこと。
+tokio-postgres = "0.7"

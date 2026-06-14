@@ -10,6 +10,7 @@ members = [
   "crates/db",
   "crates/feature-counter",
   "crates/rpc",
+  "crates/feature-bench",
 ]
 
 # 依存はここで一元管理する。featureクレートはここを編集しないこと

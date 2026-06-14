@@ -1,0 +1,14 @@
+{
+  "name": "lastshot-node",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Node.js (Fastify + postgres.js) port of lastshot's API. Rust(lastshot) vs Node の速度比較用。同一クエリ・同一レスポンス・同一 Postgres(unixソケット) で叩く。",
+  "scripts": {
+    "start": "NODE_ENV=production node server.mjs"
+  },
+  "dependencies": {
+    "fastify": "^5.2.0",
+    "postgres": "^3.4.5"
+  }
+}

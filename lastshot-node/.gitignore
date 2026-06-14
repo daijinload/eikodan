@@ -1,0 +1,6 @@
+# 依存（npm install で再生成。コミットしない）
+node_modules/
+
+# ベンチ生データ（REPORT*.md は集計結果なのでコミット対象）。
+# results / results-pool64 / results-pipe など pool違いの隔離先もまとめて除外。
+bench/results*/

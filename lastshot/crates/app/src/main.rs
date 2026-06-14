@@ -60,6 +60,8 @@ fn build_router(pool: PgPool) -> Router {
     Router::new()
         .route("/static/app.css", get(app_css))
         .merge(feature_counter::routes())
+        // ベンチ用エンドポイント（/ping, /db/light, /db/heavy, /db/sleep）。Node 版と同一API。
+        .merge(feature_bench::routes())
         // Connect API: 未マッチのパスを Connect サービスへ流す。
         // HTML と同じポートに同居（同じサービス層関数を裏で共有する）。
         .fallback_service(rpc::connect_service(pool))

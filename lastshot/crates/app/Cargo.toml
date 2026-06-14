@@ -9,6 +9,7 @@ edition = "2021"
 webcore = { path = "../webcore" }
 db = { path = "../db" }
 feature-counter = { path = "../feature-counter" }
+feature-bench = { path = "../feature-bench" }
 rpc = { path = "../rpc" }
 axum = { workspace = true }
 tokio = { workspace = true }

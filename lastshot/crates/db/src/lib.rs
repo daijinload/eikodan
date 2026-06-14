@@ -38,8 +38,15 @@ pub async fn connect() -> PgPool {
         }
     };
 
+    // プールの最大接続数。既定 8。ベンチで Rust/Node の DB接続予算を揃えるため
+    // POOL_MAX で上書きできるようにする（例: POOL_MAX=16）。
+    let max_connections = std::env::var("POOL_MAX")
+        .ok()
+        .and_then(|v| v.parse::<u32>().ok())
+        .unwrap_or(8);
+
     PgPoolOptions::new()
-        .max_connections(8)
+        .max_connections(max_connections)
         .connect_with(options)
         .await
         .unwrap_or_else(|e| {
