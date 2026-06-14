@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# lastshot/run — タスクランナー(bash 関数 + ディスパッチャ)
+#
+# なぜ bash か: Make 代替を比較した結論(task-runners/)。just/Task 等は「もう一つ
+#   ツールを入れる」。bash だけで完結し、fail-fast(set -euo pipefail)と依存の重複
+#   排除(once)で弱点を潰せる = 追加インストール不要で一番シンプルに正しく動く。
+#
+#   ./run dev           # 実行コマンドを + 付きで表示してから実行(既定ON)
+#   ./run -q dev        # -q / Q=1 でコマンド表示を抑止(結果だけ)
+#   ./run               # 引数なし → help(一覧)
+set -euo pipefail
+
+# postgresql@17 は keg-only(PATH非追加)なので絶対パスで叩く。接続は unix ソケット
+# (/tmp)= pg-bench の結論「VMを挟まない・最速」。db クレートの既定接続先と揃える。
+PGBIN=/opt/homebrew/opt/postgresql@17/bin
+PG_DB=lastshot
+PG_HOST=/tmp
+
+# 依存を「一度だけ」実行するメモ化ヘルパ。連想配列は bash4+ 限定なので、
+# 文字列メンバーシップで 3.2/POSIX でも動くようにする(task-runners/bash/run 由来)。
+_done=" "
+once() {
+  { _x=$-; set +x; } 2>/dev/null
+  case "$_done" in *" $1 "*) case "$_x" in *x*) set -x;; esac; return 0;; esac
+  _done="$_done$1 "
+  case "$_x" in *x*) set -x;; esac
+  "$1"
+}
+
+dev() {              # 開発サーバ起動(cargo run -p app / DB必須)
+  cargo run -p app
+}
+
+check() {            # 型チェック(cargo check --workspace)
+  cargo check --workspace
+}
+
+watch() {            # 保存で再チェック・再起動(bacon)
+  bacon
+}
+
+db-start() {         # ネイティブPostgres起動(ログイン常駐にしない=run)
+  brew services run postgresql@17
+}
+
+db-stop() {          # Postgres停止
+  brew services stop postgresql@17
+}
+
+db-setup() {         # DB作成+スキーマ/シード適用(冪等。何度流してもよい)
+  "$PGBIN/createdb" -h "$PG_HOST" "$PG_DB" 2>/dev/null || true
+  "$PGBIN/psql" -h "$PG_HOST" -d "$PG_DB" -v ON_ERROR_STOP=1 -f migrations/schema.sql
+  "$PGBIN/psql" -h "$PG_HOST" -d "$PG_DB" -v ON_ERROR_STOP=1 -f migrations/seed.sql
+}
+
+db-reset() {         # DBを作り直す(カウント値もリセット)
+  "$PGBIN/dropdb" -h "$PG_HOST" --if-exists "$PG_DB"
+  db-setup
+}
+
+css-setup() {        # Tailwind CLI + daisyUI を取得(初回のみ)
+  bash assets/setup-css.sh
+}
+
+css-check() {        # 本番CSSをクリーン生成し semgrep でパージ検査(push前ゲート)
+  bash assets/check-css.sh
+}
+
+test-http() {        # 起動済みサーバへHTTPブラックボックステスト(別ワークスペース)
+  ( cd tests-http && cargo nextest run )
+}
+
+browser() {          # ブラウザ駆動テスト(Playwright / M2 で追加予定)
+  [ -d browser ] || { echo "browser/ はまだ無い(M2 で追加予定)"; return 1; }
+  ( cd browser && npm test )
+}
+
+test() {             # まとめてテスト(http +(あれば)browser)
+  once test-http
+  [ -d browser ] && once browser || true
+}
+
+up() {               # 結合用に app+pg を compose で起動(M3 で追加予定)
+  [ -f compose.yml ] || { echo "compose.yml はまだ無い(M3 で追加予定)"; return 1; }
+  docker compose up --build
+}
+
+down() {             # compose を即停止(SIGKILL / 使い捨て前提)
+  [ -f compose.yml ] || { echo "compose.yml はまだ無い(M3 で追加予定)"; return 1; }
+  docker compose down -t 0
+}
+
+help() {             # タスク一覧
+  echo "usage: ./run <task> [args]"
+  echo "tasks:"
+  grep -E '^[a-z][a-z_-]*\(\) +\{ +#' "$0" \
+    | sed -E 's/\(\) +\{ +# */\t/' | sort | sed 's/^/  /'
+}
+
+# 実行するコマンドを + 付き(展開済み)で表示する(既定ON)。-q または Q=1 で抑止。
+_trace=1
+[ "${Q:-0}" = 1 ] && _trace=0
+[ "${1:-}" = "-q" ] && { shift; _trace=0; }
+[ "${1:-help}" = "help" ] && _trace=0          # 一覧(help)はトレースしない
+[ "$_trace" = 1 ] && { PS4='+ '; set -x; }
+
+# ディスパッチ: 引数が無ければ help、あれば $1 と同名の関数を実行
+"${@:-help}"

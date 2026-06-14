@@ -1,0 +1,13 @@
+[package]
+name = "feature-counter"
+version = "0.1.0"
+edition = "2021"
+
+# featureクレートは「葉」に保つ。依存は webcore（共有コア）・schema（スキーマ生成型 =
+# 単一の真実）・db（共有プールの型とクエリ実行）に限る。他のfeatureや connectrpc には
+# 依存しない（API公開は rpc クレートが薄い殻として担当する）。
+[dependencies]
+webcore = { path = "../webcore" }
+schema = { path = "../schema" }
+db = { path = "../db" }
+axum = { workspace = true }
