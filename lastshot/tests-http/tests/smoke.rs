@@ -8,6 +8,8 @@
 //!
 //! lastshot 固有の検証（DB保存カウンター）:
 //! - トップHTMLにカウンター要素と「同じインスタンスの埋め込みJSON」(view-data)があること。
+//! - HTMX フラグメント経路 `POST /increment` が、フルページでなく count 断片(+view-data)を返し、
+//!   値が単調増加すること（= ブラウザを動かさずに HTMX のサーバ側出力を直接検証）。
 //! - Connect API の Increment が「現在値 + 1」を返すこと（= DB が効いている）。
 
 use std::time::Duration;
@@ -89,4 +91,54 @@ async fn connect_increment_advances_value() {
         before_v + 1,
         "Increment は現在値 + 1 を返すはず（DB に永続化されている証拠）"
     );
+}
+
+/// HTMX のボタン（`hx-post="/increment" hx-target="#count" hx-swap="innerHTML"`）が叩く経路を、
+/// ブラウザを動かさずに HTTP で直接検証する。HTMX エンドポイントは「HTML 断片を返すただの POST」
+/// なので、返ってきた断片の不変条件を assert すれば API レベルでテストできる。
+#[tokio::test]
+async fn htmx_increment_returns_growing_fragment() {
+    let base = base_url();
+    let client = reqwest::Client::new();
+    wait_until_up(&client, &base).await;
+
+    // 2 回叩く。2 回目は 1 回目より大きい＝毎回 DB に永続化され増えている（単調増加）。
+    // nextest は各テストを並列実行するので、他テストの increment が間に挟まり得る。
+    // よって「厳密に +1」ではなく「増えている」を見る（increment しか無いので単調）。
+    let first = post_increment_fragment(&client, &base).await;
+    let second = post_increment_fragment(&client, &base).await;
+    assert!(
+        second > first,
+        "HTMX フラグメントの値は増え続けるはず（DB 永続のカウンター）: first={first}, second={second}"
+    );
+}
+
+/// `POST /increment` を HTMX として叩き、返ってきたフラグメントの不変条件を検証して
+/// 可視カウント値（i64）を返す。
+async fn post_increment_fragment(client: &reqwest::Client, base: &str) -> i64 {
+    let resp = client
+        .post(format!("{base}/increment"))
+        .header("HX-Request", "true") // 本物の HTMX が付けるリクエストヘッダを再現
+        .send()
+        .await
+        .unwrap();
+    assert!(resp.status().is_success(), "POST /increment should succeed");
+    let frag = resp.text().await.unwrap();
+
+    // フルページではなくフラグメント（#count の innerHTML に差し込む断片）であること。
+    let lower = frag.to_ascii_lowercase();
+    assert!(!lower.contains("<html"), "should be a fragment, not a full page");
+    assert!(!lower.contains("<!doctype"), "should be a fragment, not a full page");
+
+    // 描画に使った同じインスタンスを覗くデバッグ窓（render_view_fragment が先頭に付ける）。
+    assert!(
+        frag.contains("<!-- view-data"),
+        "fragment should embed the source view JSON as a debug comment"
+    );
+
+    // view-data コメント（先頭）を除いた可視部分がカウント値そのもの（count.html = `{{ view.value }}`）。
+    let visible = frag.rsplit("-->").next().unwrap_or(&frag).trim();
+    visible
+        .parse()
+        .unwrap_or_else(|_| panic!("fragment body should be the counter value, got: {visible:?}"))
 }
