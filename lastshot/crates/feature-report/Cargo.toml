@@ -1,0 +1,13 @@
+[package]
+name = "feature-report"
+version = "0.1.0"
+edition = "2021"
+
+# 3スタック比較の「重い一覧画面」feature（受注明細レポート）。feature クレートの作法は
+# counter と同じく「葉」に保つ ── 依存は webcore / schema / db / axum だけ。
+# データはマイグレーションせず DB の generate_series で N 行を合成して読むだけ。
+[dependencies]
+webcore = { path = "../webcore" }
+schema = { path = "../schema" }
+db = { path = "../db" }
+axum = { workspace = true }

@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package report.v1;
+
+// 3スタック比較の「重い一覧画面」題材: 受注明細レポート。
+//
+// 業務でありがちな「ページングなしの明細グリッド/レポート」を模す。データは DB の
+// generate_series で N 行を合成する(スキーマ変更なし・3スタック同一 SQL)。row 数を
+// 増やすほど「1画面あたりのサーバ描画コスト」が効いてきて、アプリ層(言語×アーキ)の差が
+// 大きく開く ── というのを見せるための画面。counter と同じく「画面に出す約束の
+// フィールドだけ」を持つビュー専用メッセージにする。
+message ReportRow {
+  int32 id = 1;
+  string order_no = 2;
+  string customer = 3;
+  string status = 4;
+  int32 qty = 5;
+  int32 unit_price = 6;
+  int32 amount = 7;
+}
+
+message ReportView {
+  int32 total_rows = 1;
+  // 合計金額は行数次第で int32 を超えうるので int64(proto3 JSON では文字列化される)。
+  int64 total_amount = 2;
+  repeated ReportRow rows = 3;
+}

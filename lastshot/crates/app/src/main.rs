@@ -44,6 +44,7 @@ fn template_dirs() -> Vec<PathBuf> {
     vec![
         PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/templates")),
         PathBuf::from(feature_counter::TEMPLATE_DIR),
+        PathBuf::from(feature_report::TEMPLATE_DIR),
     ]
 }
 
@@ -60,6 +61,7 @@ fn build_router(pool: PgPool) -> Router {
     Router::new()
         .route("/static/app.css", get(app_css))
         .merge(feature_counter::routes())
+        .merge(feature_report::routes())
         // Connect API: 未マッチのパスを Connect サービスへ流す。
         // HTML と同じポートに同居（同じサービス層関数を裏で共有する）。
         .fallback_service(rpc::connect_service(pool))

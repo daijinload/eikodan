@@ -14,3 +14,5 @@ pub mod proto {
 
 // よく使う型はクレート直下に再エクスポートしておく。
 pub use proto::counter::v1::{CounterView, GetCountRequest, IncrementRequest};
+// 重い一覧画面(3スタック比較)用のビュー型。
+pub use proto::report::v1::{ReportRow, ReportView};

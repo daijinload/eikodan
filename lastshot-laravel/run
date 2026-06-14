@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+# lastshot-laravel/run — PHP + Laravel 版カウンターのタスクランナー。
+#
+# lastshot/run と同じ作法: bash 関数 + ディスパッチャ、実行コマンドは + 付きで
+# 既定表示(-q / Q=1 で抑止)、worktree 名からスロットを決めてポート/DB を自動分離。
+#
+# 本番(prod)は実験メモの「本番相当ビルド」に合わせて nginx + php-fpm + opcache + preload
+# + `php artisan optimize`(config/route/view キャッシュ)で立てる。dev 用の `php artisan
+# serve`(単一ワーカ・毎リクエスト bootstrap)は計測に使わない。
+#
+#   ./run setup     # composer install(初回のみ)
+#   ./run serve     # php artisan serve(開発用・計測しない)
+#   ./run prod      # nginx + php-fpm(opcache+preload, artisan optimize)。計測はこれ
+#   ./run stop      # prod を停止(php-fpm / nginx)
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")"
+APP_DIR="$PWD"
+
+# ツール(unversioned php 8.5.x は PATH。fpm / nginx は keg-only なので絶対パス)。
+PHP="${PHP:-php}"
+FPM="${FPM:-/opt/homebrew/opt/php/sbin/php-fpm}"
+NGINX="${NGINX:-/opt/homebrew/opt/nginx/bin/nginx}"
+NGINX_ETC=/opt/homebrew/etc/nginx
+PGBIN=/opt/homebrew/opt/postgresql@17/bin
+
+# --- worktree スロット → ポート/DB(lastshot/run と同じ機構) ---------------------------
+# DB は lastshot と「全く同じ」を共有(同じ unix ソケット /tmp・同じ database 名)。
+# nginx は 3200 番台、php-fpm は 9100 番台で worktree ごとに分離(並列起動 OK)。
+_wt=$(basename "$(cd .. && pwd)")
+_slot=$(printf '%s' "$_wt" | grep -oE '[0-9]+$' || true)
+_n=$((10#${_slot:-0}))
+export PGDATABASE="${PGDATABASE:-lastshot${_slot:+_dan$_slot}}"
+PORT="${PORT:-$((3200 + _n))}"          # nginx 公開ポート
+FPM_PORT="${FPM_PORT:-$((9100 + _n))}"  # php-fpm 待受(127.0.0.1)
+RUN_DIR="$APP_DIR/.run"                  # 生成する実行時設定/ログ/pid(gitignore 済み)
+_cores=$(sysctl -n hw.ncpu 2>/dev/null || echo 4)
+
+setup() { # 依存取得(初回のみ: composer install)
+  composer install
+}
+
+serve() { # 開発サーバ(php artisan serve / 単一ワーカ。計測には使わない)
+  "$PHP" artisan serve --host=127.0.0.1 --port="$PORT"
+}
+
+optimize() { # 本番キャッシュ生成(config/route/view = php artisan optimize)
+  _env_db
+  "$PHP" artisan optimize
+}
+
+# .env の DB_DATABASE を現在の worktree スロットに合わせる(config:cache に焼く前に)。
+_env_db() {
+  [ -f .env ] || cp .env.example .env
+  if grep -q '^DB_DATABASE=' .env; then
+    sed -i '' -E "s/^DB_DATABASE=.*/DB_DATABASE=${PGDATABASE}/" .env
+  else
+    printf 'DB_DATABASE=%s\n' "$PGDATABASE" >>.env
+  fi
+}
+
+# nginx / php-fpm / php.ini(opcache+preload)を $RUN_DIR に生成する。
+_gen_configs() {
+  mkdir -p "$RUN_DIR" "$RUN_DIR/tmp"
+  # php.ini = システム php.ini + opcache/preload ブロック(後勝ちなので末尾追記で上書き)。
+  # 拡張(pdo_pgsql / opcache.so)は conf.d から読まれるので -c で上書きしても落ちない。
+  local sysini
+  sysini=$("$PHP" -d display_errors=0 -r 'echo php_ini_loaded_file();')
+  cat "$sysini" >"$RUN_DIR/php.ini"
+  cat >>"$RUN_DIR/php.ini" <<EOF
+
+; --- lastshot-laravel prod(opcache + preload / 実験メモ準拠) ---
+opcache.enable=1
+opcache.enable_cli=0
+opcache.memory_consumption=256
+opcache.interned_strings_buffer=16
+opcache.max_accelerated_files=20000
+opcache.validate_timestamps=0
+opcache.preload=$APP_DIR/deploy/preload.php
+opcache.preload_user=$USER
+realpath_cache_size=4096K
+realpath_cache_ttl=600
+EOF
+
+  # php-fpm プール(static = ワーカ固定数。children = コア数*2 で DB 往復中の重なりを許容)。
+  cat >"$RUN_DIR/php-fpm.conf" <<EOF
+[global]
+daemonize = no
+error_log = $RUN_DIR/php-fpm.log
+[www]
+listen = 127.0.0.1:$FPM_PORT
+pm = static
+pm.max_children = $((_cores * 2))
+catch_workers_output = yes
+clear_env = no
+EOF
+
+  # nginx(単一サーバ。public/ を root に fastcgi で php-fpm へ）。
+  # nginx 自身の変数(\$uri 等)はエスケープ、bash 変数(\$PORT 等)は展開させる。
+  cat >"$RUN_DIR/nginx.conf" <<EOF
+daemon off;
+worker_processes auto;
+pid $RUN_DIR/nginx.pid;
+error_log $RUN_DIR/nginx-error.log;
+events { worker_connections 1024; }
+http {
+  include $NGINX_ETC/mime.types;
+  default_type application/octet-stream;
+  access_log off;
+  sendfile on;
+  client_body_temp_path $RUN_DIR/tmp/client;
+  fastcgi_temp_path $RUN_DIR/tmp/fastcgi;
+  proxy_temp_path $RUN_DIR/tmp/proxy;
+  uwsgi_temp_path $RUN_DIR/tmp/uwsgi;
+  scgi_temp_path $RUN_DIR/tmp/scgi;
+  server {
+    listen 127.0.0.1:$PORT;
+    root $APP_DIR/public;
+    index index.php;
+    location / { try_files \$uri \$uri/ /index.php?\$query_string; }
+    location ~ \.php\$ {
+      fastcgi_pass 127.0.0.1:$FPM_PORT;
+      fastcgi_index index.php;
+      fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+      include $NGINX_ETC/fastcgi_params;
+    }
+  }
+}
+EOF
+}
+
+prod() { # 本番相当(nginx + php-fpm + opcache + preload + artisan optimize)。計測はこれ
+  [ -d vendor ] || composer install
+  _env_db
+  _gen_configs
+  "$PHP" artisan optimize        # config/route/view キャッシュ(.env を焼き込む)
+  # php-fpm を起動(背面)→ nginx を前面(daemon off)。Ctrl-C/終了で必ず fpm も止める。
+  "$FPM" -c "$RUN_DIR/php.ini" -y "$RUN_DIR/php-fpm.conf" -g "$RUN_DIR/php-fpm.pid" -F &
+  _fpm_pid=$!
+  trap 'kill "$_fpm_pid" 2>/dev/null || true' EXIT INT TERM HUP
+  # fpm の待受を待つ。
+  for _i in $(seq 1 30); do
+    nc -z 127.0.0.1 "$FPM_PORT" 2>/dev/null && break
+    sleep 0.2
+  done
+  echo "lastshot-laravel: http://127.0.0.1:$PORT/  (fpm 127.0.0.1:$FPM_PORT / db=$PGDATABASE)"
+  "$NGINX" -p "$RUN_DIR/" -c "$RUN_DIR/nginx.conf"
+}
+
+stop() { # prod を停止(php-fpm / nginx を片付け)
+  [ -f "$RUN_DIR/nginx.pid" ] && "$NGINX" -p "$RUN_DIR/" -c "$RUN_DIR/nginx.conf" -s stop 2>/dev/null || true
+  [ -f "$RUN_DIR/php-fpm.pid" ] && kill "$(cat "$RUN_DIR/php-fpm.pid")" 2>/dev/null || true
+  pkill -f "php-fpm.*$RUN_DIR" 2>/dev/null || true
+  echo "stopped"
+}
+
+counter() { # 共有 DB のカウンタ現在値
+  "$PGBIN/psql" -h /tmp -d "$PGDATABASE" -tAc "select value from counter where id=1"
+}
+
+url() { # このスタックの URL
+  echo "http://127.0.0.1:$PORT"
+}
+
+help() { # タスク一覧
+  echo "usage: ./run <task>   (port=$PORT / fpm=$FPM_PORT / db=$PGDATABASE)"
+  echo "tasks:"
+  grep -E '^[a-z][a-z_-]*\(\) +\{ +#' "$0" |
+    sed -E 's/\(\) +\{ +# */\t/' | sort | sed 's/^/  /'
+}
+
+# 実行コマンド表示(既定ON)。-q / Q=1 で抑止。
+_trace=1
+[ "${Q:-0}" = 1 ] && _trace=0
+[ "${1:-}" = "-q" ] && {
+  shift
+  _trace=0
+}
+[ "${1:-help}" = "help" ] && _trace=0
+[ "$_trace" = 1 ] && {
+  PS4='+ '
+  set -x
+}
+
+"${@:-help}"

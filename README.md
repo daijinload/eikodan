@@ -23,6 +23,10 @@
 | [pg-bench](./pg-bench/) | 「最速 Postgres をメモリに書く」を実効速度で横並び比較するベンチ |
 | [playwright-sample](./playwright-sample/) | Microsoft Playwright の E2E テストサンプル（Playwright MCP は評価のうえ不採用。比較は同 README） |
 | [lint-format](./lint-format/) | lint/format ツールを種別ごとのサンプルで実演する showcase（rustfmt・clippy・oxfmt・buf・shfmt/shellcheck・sqlfluff） |
+| [lastshot](./lastshot/) | 各サブプロジェクトの結論を統合した本番実装（DB保存カウンター。Rust + axum + HTMX + MiniJinja + Postgres） |
+| [lastshot-next](./lastshot-next/) | lastshot 3スタック比較: Node.js + Next.js 版（lastshot と同じ DB・同じ画面） |
+| [lastshot-laravel](./lastshot-laravel/) | lastshot 3スタック比較: PHP + Laravel 版（lastshot と同じ DB・同じ画面） |
+| [lastshot-bench](./lastshot-bench/) | 3スタック（lastshot / Next.js / Laravel）を同条件で oha 計測する横並びベンチ |
 
 ## agent-browser のインストール
 

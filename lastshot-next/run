@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# lastshot-next/run — Node.js + Next.js 版カウンターのタスクランナー。
+#
+# lastshot/run と同じ作法: bash 関数 + ディスパッチャ、実行コマンドは + 付きで
+# 既定表示(-q / Q=1 で抑止)、worktree 名からスロットを決めてポート/DB を自動分離。
+#
+#   ./run setup     # npm install(初回のみ)
+#   ./run dev       # next dev(開発・オンデマンドcompile。計測には使わない)
+#   ./run prod      # next build → next start(本番相当。計測はこちら)
+#   ./run -q prod   # コマンド表示を抑止
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
+# --- worktree ごとにポート/DB を自動で分ける(lastshot/run と同じ機構) -----------------
+# DB は lastshot と「全く同じ」を共有する: 同じネイティブ PG(unix ソケット /tmp)・
+# 同じ database 名(eikodan→lastshot / dan3→lastshot_dan3)。ポートだけ 3100 番台にずらす
+# (lastshot=3000番台 / laravel=3200番台 と衝突しない)。
+_wt=$(basename "$(cd .. && pwd)")                          # 例: dan3 / eikodan
+_slot=$(printf '%s' "$_wt" | grep -oE '[0-9]+$' || true)   # 末尾数字 → 3 / 無ければ空
+export PGHOST="${PGHOST:-/tmp}"                            # unix ソケット(pg-bench の結論)
+export PGDATABASE="${PGDATABASE:-lastshot${_slot:+_dan$_slot}}" # lastshot と同じ DB を共有
+export HOST="${HOST:-127.0.0.1}"
+export PORT="${PORT:-$((3100 + 10#${_slot:-0}))}"
+export BASE_URL="${BASE_URL:-http://$HOST:$PORT}"
+
+setup() { # 依存取得(初回のみ: npm install)
+  npm install
+}
+
+dev() { # 開発サーバ(next dev / オンデマンドcompile。計測には使わない)
+  npm run dev -- -p "$PORT" -H "$HOST"
+}
+
+build() { # 本番ビルド(next build)
+  npm run build
+}
+
+start() { # ビルド済みを起動(next start。要 ./run build 済み)
+  npm run start -- -p "$PORT" -H "$HOST"
+}
+
+prod() { # 本番相当(next build → next start)。計測はこれで起動する
+  build
+  start
+}
+
+url() { # このスタックの URL を表示(ベンチ harness が参照)
+  echo "$BASE_URL"
+}
+
+help() { # タスク一覧
+  echo "usage: ./run <task> [args]   (port=$PORT / db=$PGDATABASE)"
+  echo "tasks:"
+  grep -E '^[a-z][a-z_-]*\(\) +\{ +#' "$0" |
+    sed -E 's/\(\) +\{ +# */\t/' | sort | sed 's/^/  /'
+}
+
+# 実行コマンドを + 付きで表示(既定ON)。-q または Q=1 で抑止。
+_trace=1
+[ "${Q:-0}" = 1 ] && _trace=0
+[ "${1:-}" = "-q" ] && {
+  shift
+  _trace=0
+}
+[ "${1:-help}" = "help" ] && _trace=0
+[ "$_trace" = 1 ] && {
+  PS4='+ '
+  set -x
+}
+
+"${@:-help}"

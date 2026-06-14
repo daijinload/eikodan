@@ -27,6 +27,7 @@ dependencies = [
  "axum",
  "db",
  "feature-counter",
+ "feature-report",
  "listenfd",
  "notify",
  "rpc",
@@ -519,6 +520,16 @@ checksum = "9f1f227452a390804cdb637b74a86990f2a7d7ba4b7d5693aac9b4dd6defd8d6"
 
 [[package]]
 name = "feature-counter"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "db",
+ "schema",
+ "webcore",
+]
+
+[[package]]
+name = "feature-report"
 version = "0.1.0"
 dependencies = [
  "axum",

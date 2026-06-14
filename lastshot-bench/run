@@ -1,0 +1,183 @@
+#!/usr/bin/env bash
+# lastshot-bench/run — 3スタック横並びベンチ harness。
+#
+# lastshot(Rust) / lastshot-next(Next.js) / lastshot-laravel(Laravel) を
+# 「同じ DB・同じ画面・本番ビルド・localhost」で oha にかけ、p50/p90/p99/max と
+# RPS を markdown 表で出す(実験メモ Desktop/lastshot-3スタック比較-実験メモ.md の計測部)。
+#
+# 前提: 各スタックは別ターミナルで本番起動しておく(tests-http と同じ「サーバは別起動」方式)。
+#   (lastshot)        cd ../lastshot       && ./run release
+#   (Next.js)         cd ../lastshot-next  && ./run prod
+#   (Laravel)         cd ../lastshot-laravel && ./run prod
+# そのうえで:
+#   ./run all         # GET / と POST increment を 3スタック分まとめて計測 → 表
+#   CONN=1 ./run all  # 無負荷レイテンシ(p50/p99 のテール)を見る
+#   CONN=50 ./run all # 飽和(最大RPS)を見る(既定)
+#   ./run weight      # 1画面あたりのサブリソース参照数(fan-out の目安)
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
+# --- worktree スロット → 各スタックのポート(lastshot/run と同じ機構) ------------------
+# DB は 3スタック共有(lastshot_dan3 等)。ポートだけ帯で分ける:
+#   lastshot=3000番台 / next=3100番台 / laravel=3200番台。
+_wt=$(basename "$(cd .. && pwd)")
+_slot=$(printf '%s' "$_wt" | grep -oE '[0-9]+$' || true)
+_n=$((10#${_slot:-0}))
+PGHOST="${PGHOST:-/tmp}"
+PGDATABASE="${PGDATABASE:-lastshot${_slot:+_dan$_slot}}"
+PGBIN=/opt/homebrew/opt/postgresql@17/bin
+
+# スタック定義: 表示名 / GET URL / POST(increment) URL。
+LASTSHOT_GET="http://127.0.0.1:$((3000 + _n))/"
+LASTSHOT_POST="http://127.0.0.1:$((3000 + _n))/increment"
+NEXT_GET="http://127.0.0.1:$((3100 + _n))/"
+NEXT_POST="http://127.0.0.1:$((3100 + _n))/api/increment"
+LARAVEL_GET="http://127.0.0.1:$((3200 + _n))/"
+LARAVEL_POST="http://127.0.0.1:$((3200 + _n))/increment"
+# 重い一覧画面(受注明細レポート)。?rows=$ROWS で行数(=画面の重さ)を可変にする。
+LASTSHOT_REPORT="http://127.0.0.1:$((3000 + _n))/report"
+NEXT_REPORT="http://127.0.0.1:$((3100 + _n))/report"
+LARAVEL_REPORT="http://127.0.0.1:$((3200 + _n))/report"
+
+# 計測パラメータ(env で上書き可)。
+DURATION="${DURATION:-10s}"
+CONN="${CONN:-50}"
+WARMUP="${WARMUP:-2s}"
+# 重い一覧画面の行数(大きいほどサーバ描画コストが効き、アプリ層の差が開く)。
+ROWS="${ROWS:-1000}"
+
+# --- 1 行を計測して markdown 行を出す: _row 表示名 METHOD URL --------------------------
+_row() {
+  local name=$1 method=$2 url=$3
+  local m=()
+  [ "$method" = POST ] && m=(-m POST)
+  # ウォームアップ(V8 JIT / opcache を温める。結果は捨てる)。
+  oha "${m[@]}" -z "$WARMUP" -c "$CONN" --no-tui --output-format quiet "$url" >/dev/null 2>&1 || true
+  # 本計測。失敗してもテーブルを壊さない(空 JSON → DOWN 行)。
+  oha "${m[@]}" -z "$DURATION" -c "$CONN" --no-tui --output-format json "$url" >/tmp/lsbench.json 2>/dev/null || true
+  local vals
+  vals=$(jq -r '
+    [ .latencyPercentiles.p50*1000,
+      .latencyPercentiles.p90*1000,
+      .latencyPercentiles.p99*1000,
+      .summary.slowest*1000,
+      .summary.requestsPerSec,
+      .summary.successRate*100 ] | @tsv' /tmp/lsbench.json 2>/dev/null || true)
+  if [ -z "$vals" ]; then
+    printf '| %s | %s | — | — | — | — | — | DOWN? |\n' "$name" "$method"
+    return 0
+  fi
+  local p50 p90 p99 mx rps ok
+  IFS=$'\t' read -r p50 p90 p99 mx rps ok <<<"$vals"
+  printf '| %s | %s | %.3f | %.3f | %.3f | %.3f | %.0f | %.1f%% |\n' \
+    "$name" "$method" "$p50" "$p90" "$p99" "$mx" "$rps" "$ok"
+}
+
+_table_head() {
+  echo "| stack | route | p50(ms) | p90(ms) | p99(ms) | max(ms) | RPS | success |"
+  echo "|---|---|---|---|---|---|---|---|"
+}
+
+get() { # GET /(画面表示)を 3スタック計測
+  echo "### GET /  (c=$CONN, ${DURATION}, db=$PGDATABASE)"
+  _table_head
+  _row lastshot GET "$LASTSHOT_GET"
+  _row next GET "$NEXT_GET"
+  _row laravel GET "$LARAVEL_GET"
+  echo
+}
+
+post() { # POST increment(DB書込往復)を 3スタック計測
+  echo "### POST increment  (c=$CONN, ${DURATION}, db=$PGDATABASE)"
+  _table_head
+  _row lastshot POST "$LASTSHOT_POST"
+  _row next POST "$NEXT_POST"
+  _row laravel POST "$LARAVEL_POST"
+  echo
+}
+
+all() { # GET と POST をまとめて計測(主エントリ)
+  get
+  post
+}
+
+report() { # 重い一覧画面 GET /report?rows=$ROWS を 3スタック計測(ROWS で行数可変)
+  local q="?rows=$ROWS"
+  echo "### GET /report  (rows=$ROWS, c=$CONN, ${DURATION}, db=$PGDATABASE)"
+  _table_head
+  _row lastshot GET "$LASTSHOT_REPORT$q"
+  _row next GET "$NEXT_REPORT$q"
+  _row laravel GET "$LARAVEL_REPORT$q"
+  echo
+}
+
+# --- 1画面あたりのサブリソース参照数(fan-out の目安) --------------------------------
+# GET / の HTML を取り、<script src> / <link href> / <img src> の参照数を数える。
+# 厳密な「実リクエスト数」はブラウザ HAR(lastshot/browser の Playwright)で測るべきだが、
+# サーバが返す HTML が次に何本引っ張るかの目安にはなる。
+_weight() {
+  local name=$1 url=$2
+  local html refs
+  html=$(curl -s --max-time 5 "$url" 2>/dev/null) || true
+  if [ -z "$html" ]; then
+    printf '| %s | DOWN? | — |\n' "$name"
+    return 0
+  fi
+  # grep が 0 マッチで exit 1 → pipefail で落ちるのを防ぐ(|| true を grep 側に当てる)。
+  # 全部インライン(Laravel/lastshot)だと 0 refs = 立派なデータ点。
+  refs=$({ printf '%s' "$html" | grep -oE '<(script[^>]*src|link[^>]*href|img[^>]*src)=' || true; } | wc -l | tr -d ' ')
+  printf '| %s | %s bytes | %s refs |\n' "$name" "$(printf '%s' "$html" | wc -c | tr -d ' ')" "$refs"
+}
+
+weight() { # 1画面あたりの HTML サイズ / サブリソース参照数(fan-out 目安)
+  echo "### GET / の重さ(HTML本体サイズ / サブリソース参照数)"
+  echo "| stack | html | sub-resource refs |"
+  echo "|---|---|---|"
+  _weight lastshot "$LASTSHOT_GET"
+  _weight next "$NEXT_GET"
+  _weight laravel "$LARAVEL_GET"
+  echo
+}
+
+counter() { # 共有 DB のカウンタ現在値を表示
+  "$PGBIN/psql" -h "$PGHOST" -d "$PGDATABASE" -tAc "select value from counter where id=1"
+}
+
+reset() { # 共有 DB のカウンタを 0 に戻す(計測後の片付け用)
+  "$PGBIN/psql" -h "$PGHOST" -d "$PGDATABASE" -c "update counter set value = 0 where id = 1"
+}
+
+urls() { # 各スタックの想定 URL を表示(起動先の確認用)
+  echo "lastshot GET : $LASTSHOT_GET"
+  echo "lastshot POST: $LASTSHOT_POST"
+  echo "next     GET : $NEXT_GET"
+  echo "next     POST: $NEXT_POST"
+  echo "laravel  GET : $LARAVEL_GET"
+  echo "laravel  POST: $LARAVEL_POST"
+  echo "lastshot RPT : $LASTSHOT_REPORT?rows=$ROWS"
+  echo "next     RPT : $NEXT_REPORT?rows=$ROWS"
+  echo "laravel  RPT : $LARAVEL_REPORT?rows=$ROWS"
+}
+
+help() { # タスク一覧
+  echo "usage: ./run <task>   (db=$PGDATABASE, CONN=$CONN, DURATION=$DURATION で上書き可)"
+  echo "tasks:"
+  grep -E '^[a-z][a-z_-]*\(\) +\{ +#' "$0" |
+    sed -E 's/\(\) +\{ +# */\t/' | sort | sed 's/^/  /'
+}
+
+# 実行コマンド表示(既定ON)。-q / Q=1 で抑止。計測系は出力が主役なので help と同様トレースしない。
+_trace=1
+[ "${Q:-0}" = 1 ] && _trace=0
+[ "${1:-}" = "-q" ] && {
+  shift
+  _trace=0
+}
+case "${1:-help}" in help | get | post | all | report | weight | counter | urls) _trace=0 ;; esac
+[ "$_trace" = 1 ] && {
+  PS4='+ '
+  set -x
+}
+
+"${@:-help}"

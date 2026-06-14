@@ -1,0 +1,68 @@
+/* lastshot と「同じ画面」に寄せた最小 CSS。CSS フレームワークのビルド差を比較の
+   交絡にしないため、Tailwind/daisyUI は引かず手書きで見た目だけ合わせる
+   (大きい等幅の数字 + primary 色のワイドボタン + 補足テキスト)。 */
+:root {
+  --base-200: #e5e6e6;
+  --base-content: #1f2937;
+  --primary: #491eff;
+  --primary-content: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  padding: 1.5rem;
+  background: var(--base-200);
+  color: var(--base-content);
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.wrap {
+  max-width: 48rem;
+  margin: 0 auto;
+}
+
+.hero {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  text-align: center;
+}
+
+.count {
+  color: var(--primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 4.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.btn {
+  margin-top: 1.5rem;
+  min-width: 16rem;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 0.5rem;
+  background: var(--primary);
+  color: var(--primary-content);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.note {
+  margin-top: 1rem;
+  font-size: 0.75rem;
+  opacity: 0.5;
+}

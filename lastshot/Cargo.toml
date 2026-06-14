@@ -9,6 +9,7 @@ members = [
   "crates/schema",
   "crates/db",
   "crates/feature-counter",
+  "crates/feature-report",
   "crates/rpc",
 ]
 

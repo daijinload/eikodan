@@ -128,6 +128,16 @@ impl AppState {
         Html(insert_view_comment(html, &json))
     }
 
+    /// 生成型インスタンスを1つ渡してフルページ描画する（`render_view` から
+    /// `<!-- view-data -->` 埋め込みを省いた版）。大きな一覧（数百〜数千行）では
+    /// 同じデータをもう一度 JSON 直列化して末尾に埋めるコストが非現実的に重く、
+    /// 比較計測では「描画そのもの」を測りたいので埋め込みを外す。スキーマファースト
+    /// （型は proto・テンプレは camelCase で `view.*` 参照）は `render_view` と同じ。
+    pub fn render_view_plain<T: Serialize>(&self, name: &str, view: &T) -> Html<String> {
+        let value = Value::from_serialize(view);
+        self.render(name, context! { view => value })
+    }
+
     /// HTMX部分更新（フラグメント）用。`render_view` と同じく生成型インスタンスを1つ渡すと、
     /// それを描画しつつ、**同じインスタンス**を HTMLコメント `<!-- view-data ... -->` として
     /// **先頭**に付ける（レスポンスを上から読むときデータが先に見えるように）。
