@@ -162,6 +162,88 @@ down() { # compose を即停止(SIGKILL / 使い捨て前提)
   docker compose down -t 0
 }
 
+# --- CI(.github/workflows/lastshot-ci.yml)をローカルで一気通しする ------------------
+# CI と同じ TCP postgres・release バイナリ・test-http→browser の流れを手元で再現する。
+# postgres は「使い捨てコンテナ」を worktree ごとのポートで立てる(5432+slot ＝ dan1〜dan4 並列OK・
+# ネイティブPGの 5432 とも衝突しない)。compose の postgres には公開ポートが無い(同一網前提・
+# worktree 並列のため不変にしている)ので、ここは docker run で host に publish する。
+# 破棄は docker rm -f(即SIGKILL ＝ down -t 0 と同じ作法)。
+CI_PG_NAME="lastshot-ci-pg${_slot:-0}"
+CI_PGPORT="${CI_PGPORT:-$((5432 + 10#${_slot:-0}))}"
+
+build-release() { # release ビルド(CIと同じ cargo build --release -p app)
+  cargo build --release -p app
+}
+
+ci-db-up() { # 使い捨て postgres(TCP)を起動しヘルスを待つ(要 DATABASE_URL 経路)
+  docker rm -f "$CI_PG_NAME" >/dev/null 2>&1 || true
+  docker run -d --name "$CI_PG_NAME" \
+    -e POSTGRES_USER=lastshot -e POSTGRES_PASSWORD=lastshot -e POSTGRES_DB="$PGDATABASE" \
+    -p "${CI_PGPORT}:5432" postgres:17-alpine >/dev/null
+  for i in $(seq 1 30); do
+    docker exec "$CI_PG_NAME" pg_isready -U lastshot -d "$PGDATABASE" >/dev/null 2>&1 && return 0
+    sleep 1
+  done
+  echo "postgres が起動しませんでした:"
+  docker logs "$CI_PG_NAME"
+  return 1
+}
+
+ci-db-down() { # 使い捨て postgres を即破棄(SIGKILL)
+  docker rm -f "$CI_PG_NAME" >/dev/null 2>&1 || true
+}
+
+ci-migrate() { # 使い捨てpgへ Flyway で migrations を適用(CIと同じ db-migrate 経路)
+  # CI と同様 Flyway(docker)を --network=host で回し、host に publish した使い捨てpgの
+  # localhost:CI_PGPORT へ繋ぐ。db-migrate(=_flyway)を FLYWAY_* env で上書きするだけ。
+  FLYWAY_NETWORK=host \
+    FLYWAY_URL="jdbc:postgresql://localhost:${CI_PGPORT}/${PGDATABASE}" \
+    FLYWAY_USER=lastshot FLYWAY_PASSWORD=lastshot \
+    db-migrate
+}
+
+ci-app-start() { # release バイナリを TCP 接続で起動(ログ/PIDは worktree ごと)
+  HOST=127.0.0.1 PORT="$PORT" nohup ./target/release/app \
+    >"/tmp/lastshot-ci-app-${_slot:-0}.log" 2>&1 &
+  echo $! >"/tmp/lastshot-ci-app-${_slot:-0}.pid"
+}
+
+ci-app-wait() { # アプリの起動を待つ(BASE_URL に疎通するまで最大60s)
+  for i in $(seq 1 60); do
+    curl -sf "$BASE_URL/" >/dev/null && {
+      echo "app is up after ${i}s"
+      return 0
+    }
+    sleep 1
+  done
+  echo "app が起動しませんでした:"
+  cat "/tmp/lastshot-ci-app-${_slot:-0}.log"
+  return 1
+}
+
+ci-app-stop() { # ci-app-start で起動したアプリを停止
+  local pf="/tmp/lastshot-ci-app-${_slot:-0}.pid"
+  [ -f "$pf" ] && kill "$(cat "$pf")" 2>/dev/null || true
+  rm -f "$pf"
+}
+
+ci() { # CIをローカルで一気通し(build→CSSゲート→TCP pg→起動→test-http→browser)
+  # CI と同じ TCP 接続(db::connect() が DATABASE_URL を優先 ＝ unix ソケットでなく compose 同一網作法)。
+  export DATABASE_URL="postgres://lastshot:lastshot@127.0.0.1:${CI_PGPORT}/${PGDATABASE}"
+  trap 'ci-app-stop; ci-db-down' EXIT # 成否によらず必ずアプリ停止＋pg破棄
+  build-release
+  once css-setup
+  css-check
+  ci-db-up
+  ci-migrate
+  ci-app-start
+  ci-app-wait
+  test-http
+  once browser-setup
+  browser
+  echo "CI(local) OK"
+}
+
 help() { # タスク一覧
   echo "usage: ./run <task> [args]"
   echo "tasks:"
