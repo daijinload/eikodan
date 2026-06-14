@@ -5,8 +5,9 @@ use std::path::PathBuf;
 use axum::{response::IntoResponse, routing::get, Router};
 use webcore::AppState;
 
-/// CLI生成のCSSを `/static/app.css` で配信する。テンプレ同様ディスクから読む
-/// （tailwind --watch の出力を即反映。納品時の埋め込みはテンプレと足並みを揃えて将来対応）。
+/// CLI生成のCSSを `/static/app.css` で配信する（builtモード／release時のみ参照される）。
+/// テンプレ同様ディスクから直読みするので、クリーンビルドの出力を即反映できる
+/// （納品時の埋め込みはテンプレと足並みを揃えて将来対応）。
 const CSS_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/static/app.css");
 
 async fn app_css() -> impl IntoResponse {
@@ -28,7 +29,7 @@ async fn app_css() -> impl IntoResponse {
         }
         Err(_) => (
             axum::http::StatusCode::NOT_FOUND,
-            "app.css 未生成: `bash assets/setup-css.sh` 後に tailwind --watch を回してください",
+            "app.css 未生成: builtモードには生成が要る。`bash assets/setup-css.sh` 後に `bash assets/check-css.sh`（日常はCDNなので CSS=built を外せば不要）",
         )
             .into_response(),
     }
@@ -43,8 +44,16 @@ fn template_dirs() -> Vec<PathBuf> {
     ]
 }
 
+/// CSSの配信モードを実行時に決める（コンパイルプロファイルには紐付けない）。
+/// - release は常にCLI生成CSS（本番＝パージ済み）。
+/// - debug は既定でCDN（ビルド/watch不要の軽量開発）。`CSS=built` で最終確認モードに切替。
+///   env変数の実行時読みなので debug↔最終確認の往復で再ビルドは走らない。
+fn css_built() -> bool {
+    cfg!(not(debug_assertions)) || matches!(std::env::var("CSS").as_deref(), Ok("built"))
+}
+
 fn build_router() -> Router {
-    let state = AppState::new(template_dirs());
+    let state = AppState::new(template_dirs(), css_built());
     Router::new()
         .route("/static/app.css", get(app_css))
         .merge(feature_hello::routes())
@@ -76,7 +85,11 @@ async fn main() {
                 .unwrap()
         }
     };
-    println!("listening on http://{}", listener.local_addr().unwrap());
+    let css_mode = if css_built() { "built (/static/app.css)" } else { "cdn" };
+    println!(
+        "listening on http://{}  [css: {css_mode}]",
+        listener.local_addr().unwrap()
+    );
     axum::serve(listener, router).await.unwrap();
 }
 
@@ -104,10 +117,13 @@ fn with_live_reload(router: Router) -> Router {
                 }
             })
             .expect("create file watcher");
-        // テンプレHTML + CLI生成CSSの出力先を監視。
-        // テンプレ保存 → tailwind --watch が app.css を書き直す → そのCSS変更で再読込（最新CSSで反映）。
+        // テンプレHTMLを常に監視（保存→自動リロード）。
+        // builtモードのときだけCLI生成CSSの出力先 static/ も監視する
+        // （tailwind --watch が app.css を書き直す → そのCSS変更で再読込）。CDN既定では static/ は生成されず不要。
         let mut watch_dirs = template_dirs();
-        watch_dirs.push(PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/static")));
+        if css_built() {
+            watch_dirs.push(PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/static")));
+        }
         for dir in watch_dirs {
             if let Err(e) = watcher.watch(&dir, RecursiveMode::Recursive) {
                 eprintln!("watch {dir:?} failed: {e}");
