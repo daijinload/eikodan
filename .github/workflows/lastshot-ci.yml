@@ -50,6 +50,12 @@ jobs:
     env:
       # 本番/CI は TCP（compose 同一網と同じ接続作法）。
       DATABASE_URL: postgres://lastshot:lastshot@localhost:5432/lastshot
+      # worktree 自動分離（PORT/PGDATABASE/BASE_URL）を CI では本流相当（スロット0）に固定。
+      # ./run はこれらを ${VAR:-…} で尊重するので、チェックアウト先ディレクトリ名に依存せず
+      # 3000 / lastshot で動く（postgres サービス・Start app・tests-http/browser の接続先が揃う）。
+      PORT: "3000"
+      PGDATABASE: lastshot
+      BASE_URL: http://127.0.0.1:3000
       # dev機向け最適化を無効化（素ビルド）。
       RUSTFLAGS: ""
       CARGO_BUILD_RUSTC_WRAPPER: ""
