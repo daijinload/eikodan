@@ -31,6 +31,10 @@ export PORT="${PORT:-$((3000 + 10#${_slot:-0}))}"                  # dev: main.r
 export BASE_URL="${BASE_URL:-http://127.0.0.1:$PORT}"            # tests-http の接続先
 export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-lastshot${_slot:+_dan$_slot}}"  # compose 名衝突回避
 
+# migrations は Flyway で管理する。CLI/JRE はローカルに入れず docker image で実行する
+# （compose / CI と同じ版）。tag は docker hub の最新メジャーに追従。
+FLYWAY_IMAGE=flyway/flyway:12-alpine
+
 # 依存を「一度だけ」実行するメモ化ヘルパ。連想配列は bash4+ 限定なので、
 # 文字列メンバーシップで 3.2/POSIX でも動くようにする(task-runners/bash/run 由来)。
 _done=" "
@@ -62,13 +66,39 @@ db-stop() {          # Postgres停止
   brew services stop postgresql@17
 }
 
-db-setup() {         # DB作成+スキーマ/シード適用(冪等。何度流してもよい)
-  "$PGBIN/createdb" -h "$PG_HOST" "$PG_DB" 2>/dev/null || true
-  "$PGBIN/psql" -h "$PG_HOST" -d "$PG_DB" -v ON_ERROR_STOP=1 -f migrations/schema.sql
-  "$PGBIN/psql" -h "$PG_HOST" -d "$PG_DB" -v ON_ERROR_STOP=1 -f migrations/seed.sql
+# Flyway(docker image)を実行する共通ヘルパ。既定は native dev 用の接続:
+#   - native postgres へは host.docker.internal 経由で TCP 接続する
+#     （Docker Desktop が host の localhost:5432 へ中継。--add-host は付けない）。
+#   - DB名は worktree スロットに応じた $PG_DB（lastshot / lastshot_danN）。
+#   - ロールは OS ユーザー(initdb 既定)。trust 認証なのでパスワードは空でよい。
+# FLYWAY_URL / FLYWAY_USER / FLYWAY_PASSWORD / FLYWAY_NETWORK を env で上書きできる
+# （CI は postgres サービスへ繋ぐので --network=host + localhost を渡す）。
+_flyway() {
+  local net_arg=""
+  if [ -n "${FLYWAY_NETWORK:-}" ]; then net_arg="--network=${FLYWAY_NETWORK}"; fi
+  docker run --rm ${net_arg} \
+    -v "$PWD/migrations:/flyway/sql:ro" \
+    -v "$PWD/flyway.toml:/flyway/conf/flyway.toml:ro" \
+    -e FLYWAY_URL="${FLYWAY_URL:-jdbc:postgresql://host.docker.internal:5432/$PG_DB}" \
+    -e FLYWAY_USER="${FLYWAY_USER:-$USER}" \
+    -e FLYWAY_PASSWORD="${FLYWAY_PASSWORD:-}" \
+    "$FLYWAY_IMAGE" -configFiles=/flyway/conf/flyway.toml -connectRetries=60 "$@"
 }
 
-db-reset() {         # DBを作り直す(カウント値もリセット)
+db-migrate() {       # Flywayでmigrationsを適用(docker / native DBへ host.docker.internal 経由)
+  _flyway migrate
+}
+
+db-info() {          # 適用状況を表示(flyway info)
+  _flyway info
+}
+
+db-setup() {         # DB作成 + Flyway migrate(冪等。何度流してもよい)
+  "$PGBIN/createdb" -h "$PG_HOST" "$PG_DB" 2>/dev/null || true
+  db-migrate
+}
+
+db-reset() {         # DBを作り直す(スキーマもカウント値もまっさらに作り直し)
   "$PGBIN/dropdb" -h "$PG_HOST" --if-exists "$PG_DB"
   db-setup
 }

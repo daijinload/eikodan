@@ -66,11 +66,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install protoc + psql client + semgrep
+      - name: Install protoc + semgrep
         run: |
           # apt-get update(~12-17s)は省略し、ランナー同梱の index で直接 install(~8s)。
           # 稀に index が古く失敗する時だけ update→retry で自己回復(ARM実機ベンチで fast-path 確認済)。
-          pkgs="protobuf-compiler postgresql-client"
+          # migrations は Flyway(docker image)で適用するので psql クライアントは入れない。
+          pkgs="protobuf-compiler"
           sudo apt-get install -y --no-install-recommends $pkgs \
             || { sudo apt-get update && sudo apt-get install -y --no-install-recommends $pkgs; }
           # semgrep は uv で入れる。実機ベンチ(ARM)で pipx ~16s に対し uv は ~2s だった。
@@ -96,10 +97,15 @@ jobs:
             lastshot
             lastshot/tests-http
 
-      - name: Apply migrations
-        run: |
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/schema.sql
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/seed.sql
+      - name: Apply migrations (Flyway / docker image = ./run と同じ)
+        # postgres は service コンテナ。--network=host で runner の localhost:5432 へ繋ぐ。
+        # PGDATABASE は job env で本流相当(lastshot)にピン済み。
+        env:
+          FLYWAY_NETWORK: host
+          FLYWAY_URL: jdbc:postgresql://localhost:5432/lastshot
+          FLYWAY_USER: lastshot
+          FLYWAY_PASSWORD: lastshot
+        run: ./run -q db-migrate
 
       - name: Build app (release)
         run: cargo build --release -p app

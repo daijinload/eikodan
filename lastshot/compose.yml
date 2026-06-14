@@ -1,9 +1,12 @@
-# app + postgres を同一ネットワークで起動して結合確認する（ローカル統合 / `./run up`）。
+# app + postgres + flyway を同一ネットワークで起動して結合確認する（ローカル統合 / `./run up`）。
 # 停止は `./run down`（= docker compose down -t 0 / 即SIGKILL・使い捨て前提）。
 #
 # 接続は本番/CI と同じ DATABASE_URL の TCP（compose 同一網）。開発既定の unix ソケット
 # （pg-bench の結論で最速）とは別経路で、db::connect() が DATABASE_URL の有無で分岐する。
-# データボリュームは持たない（使い捨て前提 ── down のたびに消え、up で migrations が冪等に再適用される）。
+# データボリュームは持たない（使い捨て前提 ── down のたびに消え、up で flyway が再適用する）。
+#
+# 起動順: postgres(healthy) → flyway(migrate して exit 0) → app。app は flyway の
+# service_completed_successfully を待つので、必ずスキーマ適用後に立ち上がる。
 #
 # worktree 並列対応（dev と同じ機構）: `./run` が worktree 名からスロットを決めて
 #   PORT（公開ポート）/ PGDATABASE（DB名）/ COMPOSE_PROJECT_NAME（コンテナ名前空間）を export する。
@@ -16,15 +19,29 @@ services:
       POSTGRES_USER: lastshot
       POSTGRES_PASSWORD: lastshot
       POSTGRES_DB: ${PGDATABASE:-lastshot}
-    # migrations/*.sql を初回起動時に流す（schema.sql → seed.sql のアルファベット順）。
-    # どちらも冪等（create table if not exists / on conflict do nothing）。
-    volumes:
-      - ./migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U lastshot -d ${PGDATABASE:-lastshot}"]
       interval: 2s
       timeout: 3s
       retries: 30
+
+  # マイグレーションを適用して終了する使い捨てジョブ（migrate 後に exit 0）。
+  # SQL は ./migrations、挙動は ./flyway.toml をマウント。接続は同一網の postgres へ
+  # （DB名は worktree スロットに応じた ${PGDATABASE:-lastshot}）。
+  # -connectRetries で postgres の起動を待つ（healthcheck と二重の保険）。
+  flyway:
+    image: flyway/flyway:12-alpine
+    command: -configFiles=/flyway/conf/flyway.toml -connectRetries=60 migrate
+    environment:
+      FLYWAY_URL: jdbc:postgresql://postgres:5432/${PGDATABASE:-lastshot}
+      FLYWAY_USER: lastshot
+      FLYWAY_PASSWORD: lastshot
+    volumes:
+      - ./migrations:/flyway/sql:ro
+      - ./flyway.toml:/flyway/conf/flyway.toml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   app:
     build:
@@ -40,3 +57,5 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      flyway:
+        condition: service_completed_successfully
