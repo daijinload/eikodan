@@ -1,0 +1,20 @@
+{
+  "name": "playwright-sample",
+  "version": "0.1.0",
+  "description": "Microsoft Playwright のE2Eテスト検証用サンプル",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "report": "playwright show-report",
+    "codegen": "playwright codegen",
+    "install:browsers": "playwright install chromium",
+    "demo:subsecond": "node scripts/drive-subsecond.mjs"
+  },
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
+  }
+}

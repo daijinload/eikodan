@@ -1,2 +1,8 @@
 # macOS
 .DS_Store
+
+# Claude Code 個人ローカル設定（コミットしない）
+.claude/settings.local.json
+
+# Playwright MCP がスナップショットを書き出す作業ディレクトリ
+.playwright-mcp/
