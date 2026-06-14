@@ -133,6 +133,18 @@ jobs:
       - name: HTTP black-box tests (tests-http)
         run: ./run -q test-http
 
+      # Playwright Chromium(~120MB) と npm deps をキャッシュ。ARM 実機ベンチで browser-setup が
+      # 21s→6s + restore 5s = 正味 ~10s 短縮、保存(Post)はキー命中時 0s(payload 小で rust-cache の
+      # 10GB枠も圧迫しない)。本命の効果は「Chromium DL のネットワーク変動(時々30-40sに跳ねる)」を
+      # 消して CI 総時間のブレを縮めること。キーは package-lock の hash 連動で playwright 更新時に自動失効。
+      - name: Cache Playwright browser + npm deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/ms-playwright
+            lastshot/browser/node_modules
+          key: playwright-${{ runner.arch }}-${{ hashFiles('lastshot/browser/package-lock.json') }}
+
       - name: Browser E2E (Playwright)
         run: |
           ./run -q browser-setup
