@@ -75,17 +75,8 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           uv tool install semgrep==1.166.0
 
-      # nightly toolchain をキャッシュ(実機ベンチ 7s→3s)。channel="nightly"は浮動だが、
-      # key を rust-toolchain.toml の hash 固定にして nightly を凍結 → rust-cache の
-      # rustc 版も安定しヒット率が上がる副次効果も。pin を変えたい時は toml を編集して鍵更新。
-      - name: Cache rustup toolchain (nightly)
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.rustup/toolchains
-            ~/.rustup/update-hashes
-          key: rustup-${{ runner.arch }}-${{ hashFiles('lastshot/rust-toolchain.toml') }}
-
+      # rustup toolchain のキャッシュは実機で逆効果(保存48s ≫ 復元4s、巨大 toolchain が
+      # 10GB枠で本命 rust-cache を圧迫)のため入れない。nightly 導入(~7s)は素で実行する。
       - name: Install Rust nightly (rust-toolchain.toml に合わせる)
         run: rustup toolchain install nightly --component rust-src --profile minimal
 
