@@ -19,7 +19,8 @@ use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 /// 接続プールを作る。
 ///
 /// `DATABASE_URL` があればそれを使う(本番/CI の compose 用)。無ければ
-/// 開発既定としてネイティブ Postgres の unix ソケット(`/tmp`)・DB 名 `lastshot`・
+/// 開発既定としてネイティブ Postgres の unix ソケット(`/tmp`)・DB 名 `PGDATABASE`
+/// (既定 `lastshot` / worktree ごとに `lastshot_dan2` 等へ分けられる)・
 /// ロールは OS ユーザー(initdb が作る既定ロール)へ繋ぐ。
 ///
 /// 失敗時は理由を添えて panic する(起動時に必ず気付けるように)。
@@ -30,10 +31,13 @@ pub async fn connect() -> PgPool {
             .expect("DATABASE_URL の形式が不正"),
         Err(_) => {
             let user = std::env::var("USER").unwrap_or_else(|_| "postgres".to_string());
+            // DB 名は PGDATABASE で上書き可(worktree ごとに lastshot_dan2 等へ分けるため)。
+            // 既定は lastshot。run スクリプトが worktree 名からスロットを決めて export する。
+            let database = std::env::var("PGDATABASE").unwrap_or_else(|_| "lastshot".to_string());
             PgConnectOptions::new()
                 .socket("/tmp") // pg-bench の結論: unix ソケットが最速
                 .username(&user)
-                .database("lastshot")
+                .database(&database)
         }
     };
 

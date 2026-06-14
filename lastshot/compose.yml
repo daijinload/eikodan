@@ -4,19 +4,24 @@
 # 接続は本番/CI と同じ DATABASE_URL の TCP（compose 同一網）。開発既定の unix ソケット
 # （pg-bench の結論で最速）とは別経路で、db::connect() が DATABASE_URL の有無で分岐する。
 # データボリュームは持たない（使い捨て前提 ── down のたびに消え、up で migrations が冪等に再適用される）。
+#
+# worktree 並列対応（dev と同じ機構）: `./run` が worktree 名からスロットを決めて
+#   PORT（公開ポート）/ PGDATABASE（DB名）/ COMPOSE_PROJECT_NAME（コンテナ名前空間）を export する。
+#   ここではそれを ${VAR:-既定} で受けるだけ。`./run up` 経由なら dan2 は 3002 / lastshot_dan2 で立つ。
+#   素の `docker compose up` でも既定（3000 / lastshot）で動く。
 services:
   postgres:
     image: postgres:17-alpine
     environment:
       POSTGRES_USER: lastshot
       POSTGRES_PASSWORD: lastshot
-      POSTGRES_DB: lastshot
+      POSTGRES_DB: ${PGDATABASE:-lastshot}
     # migrations/*.sql を初回起動時に流す（schema.sql → seed.sql のアルファベット順）。
     # どちらも冪等（create table if not exists / on conflict do nothing）。
     volumes:
       - ./migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U lastshot -d lastshot"]
+      test: ["CMD-SHELL", "pg_isready -U lastshot -d ${PGDATABASE:-lastshot}"]
       interval: 2s
       timeout: 3s
       retries: 30
@@ -27,10 +32,11 @@ services:
       dockerfile: Dockerfile
     environment:
       # compose 同一網の postgres へ TCP 接続（db::connect() が DATABASE_URL を優先）。
-      DATABASE_URL: postgres://lastshot:lastshot@postgres:5432/lastshot
+      DATABASE_URL: postgres://lastshot:lastshot@postgres:5432/${PGDATABASE:-lastshot}
       # Dockerfile 既定の HOST=0.0.0.0 / PORT=3000 を使う（外から到達できるように）。
     ports:
-      - "3000:3000"
+      # 公開ポートだけ worktree ごとに変える（コンテナ内は常に 3000）。
+      - "${PORT:-3000}:3000"
     depends_on:
       postgres:
         condition: service_healthy

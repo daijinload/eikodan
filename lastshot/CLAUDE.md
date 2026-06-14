@@ -38,7 +38,9 @@
 - **`sqlx` は `db` クレートに閉じる**。feature 側は自分の Cargo.toml に sqlx を書かず `db::sqlx` / `db::Row` を使う
   （依存を1か所に集約 ＝ workspace 共通 deps を不用意に増やさない）。
 - **接続先**: 開発は既定でネイティブPGの unix ソケット（pg-bench の結論で最速）。本番/CI は `DATABASE_URL` で
-  TCP（compose 同一網）に上書き。`db::connect()` がこの分岐を持つ。
+  TCP（compose 同一網）に上書き。`db::connect()` がこの分岐を持つ。dev の database 名は `PGDATABASE`
+  で上書き可（既定 `lastshot`）。`./run` が worktree 名からスロットを決めて `PORT`/`PGDATABASE`/
+  `COMPOSE_PROJECT_NAME` を export し、dan1〜dan4 を並列起動しても衝突しない（README「worktree 並列起動」）。
 - **migrations は `migrations/schema.sql` + `seed.sql`**（`psql -f`、冪等）。マイグレーションフレームワークは入れない。
 
 ## クレート依存の向き（package by feature + schema + db）

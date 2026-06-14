@@ -13,8 +13,23 @@ set -euo pipefail
 # postgresql@17 は keg-only(PATH非追加)なので絶対パスで叩く。接続は unix ソケット
 # (/tmp)= pg-bench の結論「VMを挟まない・最速」。db クレートの既定接続先と揃える。
 PGBIN=/opt/homebrew/opt/postgresql@17/bin
-PG_DB=lastshot
 PG_HOST=/tmp
+
+# --- worktree ごとにポート/DB/composeプロジェクトを自動で分ける ----------------------
+# 同一マシンで dan1〜dan4 を並列起動してもぶつからないよう、worktree のディレクトリ名から
+# スロットを決める(lastshot は常に worktree 直下なので親フォルダ名 = dan2 / eikodan …)。
+# DB は 1つのネイティブPostgres を共有(unixソケット・ポート同じ)し、中の database 名だけ分ける。
+#   eikodan(本流) → PORT=3000 / DB=lastshot
+#   dan2          → PORT=3002 / DB=lastshot_dan2
+# dev も compose も同じ機構で動かす(PORT=待受/公開ポート, PGDATABASE=DB名, プロジェクト名)。
+# 各値は外から渡せば優先(例: PORT=3009 ./run dev)。
+_wt=$(basename "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)")  # 例: dan2 / eikodan
+_slot=$(printf '%s' "$_wt" | grep -oE '[0-9]+$' || true)           # 末尾数字 → 1,2,… 無ければ空
+PG_DB=${PG_DB:-lastshot${_slot:+_dan$_slot}}                       # 無し→lastshot / dan2→lastshot_dan2
+export PGDATABASE="$PG_DB"                  # dev: db::connect() が読む / psql・createdb も拾う
+export PORT="${PORT:-$((3000 + 10#${_slot:-0}))}"                  # dev: main.rs / compose: 公開ポート
+export BASE_URL="${BASE_URL:-http://127.0.0.1:$PORT}"            # tests-http の接続先
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-lastshot${_slot:+_dan$_slot}}"  # compose 名衝突回避
 
 # 依存を「一度だけ」実行するメモ化ヘルパ。連想配列は bash4+ 限定なので、
 # 文字列メンバーシップで 3.2/POSIX でも動くようにする(task-runners/bash/run 由来)。
