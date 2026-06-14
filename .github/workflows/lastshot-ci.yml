@@ -38,7 +38,8 @@ jobs:
         working-directory: lastshot
     services:
       postgres:
-        image: postgres:17
+        # alpine(musl)で軽量・pull が ~3s 速い(実機ベンチ 13s→10s)。用途は素のSQLのみ。
+        image: postgres:17-alpine
         env:
           POSTGRES_USER: lastshot
           POSTGRES_PASSWORD: lastshot
@@ -61,8 +62,11 @@ jobs:
 
       - name: Install protoc + psql client + semgrep
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends protobuf-compiler postgresql-client
+          # apt-get update(~12-17s)は省略し、ランナー同梱の index で直接 install(~8s)。
+          # 稀に index が古く失敗する時だけ update→retry で自己回復(ARM実機ベンチで fast-path 確認済)。
+          pkgs="protobuf-compiler postgresql-client"
+          sudo apt-get install -y --no-install-recommends $pkgs \
+            || { sudo apt-get update && sudo apt-get install -y --no-install-recommends $pkgs; }
           # semgrep は uv で入れる。実機ベンチ(ARM)で pipx ~16s に対し uv は ~2s だった。
           # 速さの正体は wheel DL ではなく venv 展開で、pipx はそこが遅い(= pip cache では
           # 縮まない/実測 cold17s→warm16s)。uv(Rust製・並列・hardlink)は素で速く、キャッシュ不要。
@@ -70,6 +74,17 @@ jobs:
           curl -LsSf https://astral.sh/uv/install.sh | sh
           export PATH="$HOME/.local/bin:$PATH"
           uv tool install semgrep==1.166.0
+
+      # nightly toolchain をキャッシュ(実機ベンチ 7s→3s)。channel="nightly"は浮動だが、
+      # key を rust-toolchain.toml の hash 固定にして nightly を凍結 → rust-cache の
+      # rustc 版も安定しヒット率が上がる副次効果も。pin を変えたい時は toml を編集して鍵更新。
+      - name: Cache rustup toolchain (nightly)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.rustup/toolchains
+            ~/.rustup/update-hashes
+          key: rustup-${{ runner.arch }}-${{ hashFiles('lastshot/rust-toolchain.toml') }}
 
       - name: Install Rust nightly (rust-toolchain.toml に合わせる)
         run: rustup toolchain install nightly --component rust-src --profile minimal

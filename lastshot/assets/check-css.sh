@@ -26,7 +26,7 @@ echo "==> [1/2] clean build (purge確定): $out"
 
 echo "==> [2/2] semgrep: パージで消える危険パターン検査"
 if ! command -v semgrep >/dev/null 2>&1; then
-  echo "ERROR: semgrep が無い。導入: brew install semgrep  (or pipx install semgrep)" >&2
+  echo "ERROR: semgrep が無い。導入: uv tool install semgrep  (CIと同手段。or brew install semgrep)" >&2
   exit 1
 fi
 # --error: 検出があれば非ゼロ終了。crates 配下のテンプレHTMLと .rs を走査。
