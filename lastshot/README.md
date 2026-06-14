@@ -234,17 +234,24 @@ cd ../dan2/lastshot   # 例: dan2 worktree へ
 
 ### CI の高速化方針（ARM 実機計測で取捨選択）
 
+> **測り方・実数・採否理由の詳細は [`CI-PERFORMANCE.md`](./CI-PERFORMANCE.md)**（調査ログ）。ここは要約。
+
 runner は `ubuntu-24.04-arm`（ローカル Apple Silicon・arm64 Docker と**アーキ一致**。public repo で無料）。
 setup 区間は**推測せず ARM 実機ベンチで効果を測って**取捨選択した:
 
 - **採用**: semgrep を `pipx`→`uv tool install`（導入 ~16s→~2.5s）/ `apt-get update` 省略（失敗時のみ
   update→retry で自己回復）/ postgres `17`→`17-alpine`（コンテナ初期化 ~13s→~9s）。
-- **本命キャッシュは `Swatinem/rust-cache`（cargo+target, build ~76s→~15s）の1個だけ**。`nextest` も
+- **採用キャッシュ① `Swatinem/rust-cache`（cargo+target, build ~76s→~15s）**＝本命。`nextest` も
   `taiki-e/install-action` で導入済みキャッシュ。
+- **採用キャッシュ② Playwright Chromium + npm（`actions/cache` で `~/.cache/ms-playwright` +
+  `browser/node_modules`）**。ARM 実機ベンチで browser-setup 21s→6s + restore 5s ＝ 正味 ~10s 短縮、
+  保存(Post)はキー命中時 0s（payload ~120MB と小さく rust-cache の 10GB 枠も圧迫しない）。本命の狙いは
+  **Chromium DL のネットワーク変動（時々30-40sに跳ねて CI 総時間を暴れさせる）を消すこと**。テスト実行
+  自体（npm test）は cache 有無に関わらず安定 ~4s。キーは `package-lock.json` の hash 連動＝playwright 更新で自動失効。
+  （当初は「payload 小で相殺」と却下したが、再計測で Chromium DL のばらつきが大きいと分かり採用に変更。）
 - **足さないと決めたキャッシュ（実機で逆効果/無駄と確認）**: semgrep の pip cache（重さは wheel DL でなく
   venv 展開なので pip cache では縮まない＝uv で解決）/ pipx venv cache（warm でも当たらない）/
-  **rustup toolchain cache（保存48s ≫ 復元4s、巨大で rust-cache の 10GB 枠を圧迫）** / Playwright・npm・apt
-  cache（payload 小で restore 相殺）。
+  **rustup toolchain cache（保存48s ≫ 復元4s、巨大で rust-cache の 10GB 枠を圧迫）** / apt cache（payload 小で restore 相殺）。
 - 原則: **「少数の太いキャッシュ」だけ**。細かいキャッシュは restore/保存コストで相殺〜逆効果になる。
 - 総 CI 時間は約2分で **x86 時とほぼ同等**（大半が arch 非依存の apt/コンテナ初期化/build/test と run毎の
   ばらつき）。ARM 化の主目的は速度ではなく**ローカルとのアーキ一致**。semgrep の scan は
