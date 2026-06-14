@@ -1,0 +1,5 @@
+[sqlfluff]
+# pg-bench が Postgres なので方言は postgres に合わせる。
+dialect = postgres
+# プレーンな .sql を素のまま扱う（Jinja テンプレ展開は無効）。
+templater = raw

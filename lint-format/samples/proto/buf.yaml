@@ -1,0 +1,11 @@
+version: v2
+modules:
+  - path: .
+lint:
+  use:
+    - STANDARD
+  except:
+    # サンプルは proto をフラット配置（samples/proto/greet.proto）に保つため、
+    # パッケージ名とディレクトリ階層の一致チェックは除外する。
+    # （greet.v1 を greet/v1/ に並べ替える構成は本サンプルの範囲外。）
+    - PACKAGE_DIRECTORY_MATCH
