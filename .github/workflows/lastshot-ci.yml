@@ -29,7 +29,10 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # ローカル(Apple Silicon=aarch64)・arm64 Docker とアーキ一致させるため ARM runner。
+    # パブリックリポジトリなので ARM runner は無料。計測上 Rust ビルドは ~14% 速いが
+    # CI 総時間は x86 とほぼ互角(大半が arch 非依存の DL/セットアップのため)。
+    runs-on: ubuntu-24.04-arm
     defaults:
       run:
         working-directory: lastshot
@@ -56,11 +59,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # semgrep だけが「重い非キャッシュ依存」(~20s の wheel DL)。ここだけ pip cache を足す。
+      # apt(protoc/psql)・npm・Playwright は payload が小さく restore で相殺なので入れない
+      # (= 少数の太いキャッシュが鉄則)。key は arch + 版で分離(ARM/x86 別物・版上げで自動更新)。
+      # pipx は内部で pip を使い ~/.cache/pip を共有するので、ヒット時は wheel を再DLしない。
+      - name: Cache pip (semgrep wheel)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-semgrep-${{ runner.arch }}-1.166.0
+
       - name: Install protoc + psql client + semgrep
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends protobuf-compiler postgresql-client
-          pipx install semgrep
+          pipx install semgrep==1.166.0
 
       - name: Install Rust nightly (rust-toolchain.toml に合わせる)
         run: rustup toolchain install nightly --component rust-src --profile minimal
