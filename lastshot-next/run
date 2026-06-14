@@ -40,9 +40,19 @@ start() { # ビルド済みを起動(next start。要 ./run build 済み)
   npm run start -- -p "$PORT" -H "$HOST"
 }
 
-prod() { # 本番相当(next build → next start)。計測はこれで起動する
+prod() { # 本番相当(next build → next start)。計測はこれで起動する(1 Node プロセス)
   build
   start
+}
+
+prod-cluster() { # 本番相当を PM2 cluster で N 多重化(既定 INSTANCES=15)。lastshot-bench 検証用
+  # next start を Node の cluster モジュール(PM2 cluster mode)で多重化し、同一ポートを共有する。
+  # 「1 Node プロセスが CPU バウンドな SSR を直列に捌く」という制約を外して、Rust(全コア1プロセス)
+  # との RPS 差が縮むかを見る用途。pm2-runtime はフォアグラウンドで動くので prod と同じ運用感。
+  build
+  export INSTANCES="${INSTANCES:-15}"
+  export PG_POOL_MAX="${PG_POOL_MAX:-4}"  # 15 × 4 = 60 < PG max_connections=100
+  npx pm2-runtime start ecosystem.config.cjs
 }
 
 url() { # このスタックの URL を表示(ベンチ harness が参照)

@@ -32,10 +32,17 @@ lastshot と同じ値に揃えて export するので、何もしなくても同
 ## セットアップと起動
 
 ```sh
-./run setup        # npm install（初回のみ）
-./run prod         # next build → next start（本番相当。計測はこれ）
-./run dev          # next dev（オンデマンド compile。計測には使わない）
+./run setup           # npm install（初回のみ）
+./run prod            # next build → next start（本番相当・1 Node プロセス。計測の既定はこれ）
+./run prod-cluster    # next build → PM2 cluster × N ワーカ(既定15・同一ポート共有)。追加実験用
+./run dev             # next dev（オンデマンド compile。計測には使わない）
 ```
+
+`prod-cluster` は [`../lastshot-bench/`](../lastshot-bench/) の「Next.js を多重化したら lastshot との
+RPS 差は縮むか」追加検証のために用意したもの。`ecosystem.config.cjs` + `cluster-start.cjs` で
+next を programmatic に起動し、Node の cluster モジュール経由で 1 ポートを N ワーカが共有する。
+`INSTANCES`（既定 15 = 論理コア数）と `PG_POOL_MAX`（既定 4。15×4=60 < `max_connections=100`）は
+env で上書き可。本来の比較（素の `next start`）は `./run prod` のままにしてある。
 
 ポートは worktree スロットで `3100 + slot`（`eikodan`→3100 / `dan3`→3103）。lastshot=3000 番台 /
 laravel=3200 番台 と衝突しない。`./run url` で URL を表示。前提: ネイティブ PostgreSQL が起動済みで、

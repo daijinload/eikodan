@@ -100,6 +100,81 @@ laravel = Laravel 13.15 on nginx 1.31 + php-fpm 8.5（static 30 ワーカ）opca
 | next | 5228 bytes | 8（hydration 用 JS chunk 群） |
 | laravel | 2142 bytes | 0（CSS/JS インライン） |
 
+## 追加検証: Next.js を PM2 cluster で多重化したら差は縮むか（c=20・2026-06-15）
+
+> 仮説: 「**lastshot は 1 プロセス全コア（15論理コア）、laravel は php-fpm 30 ワーカで多重化、
+> next は 1 Node プロセスだから不利**。c=20 で next が 0.68 秒まで詰まったのは React SSR が重い
+> ことに加えて 1 プロセスが CPU バウンドな描画を直列にさばいているから。next を PM2 で 15
+> プロセスに多重化したら、上限 RPS は数倍に上がり、1/100 という比率は 1/7 程度まで縮むはず。」
+
+`lastshot-next` に `./run prod-cluster`（PM2 cluster mode × 15 ワーカ・同一ポートを Node の
+cluster モジュールで共有）を足し、**同じ機械・同じ瞬間** で single と cluster を撃ち比べた。
+3 スタックとも localhost で oha と一緒に CPU を取り合う。
+
+### 重い一覧画面 GET /report?rows=1000（c=20・10s）── 仮説の主戦場
+
+| stack（serving）| p50(ms) | p90(ms) | p99(ms) | max(ms) | RPS | vs lastshot |
+|---|---|---|---|---|---|---|
+| lastshot（axum 全コア1プロセス） | 6.993 | 7.151 | 7.994 | 9.916 | 2854 | 1.00 |
+| next **single**（1 Node プロセス） | 645.697 | 673.001 | 863.601 | 1069.665 | **31** | **1/92** |
+| next **cluster x15**（PM2 cluster） | 82.013 | 142.296 | 202.463 | 248.522 | **208** | **1/14** |
+| laravel（nginx + php-fpm 30 ワーカ） | 20.262 | 28.447 | 37.036 | 42.334 | 949 | 1/3.0 |
+
+→ **仮説は方向としては正しかった**: next の RPS は 31 → 208（約 **6.7 倍**）、p50 は 646ms → 82ms
+（約 **1/8**）、lastshot との比は **1/92 → 1/14**。0.68 秒で詰まっていたのは確かに「1 プロセスが
+CPU バウンドな描画を直列にさばいていた」せい。ただし **1/7 までは縮まなかった**（実測 1/14）。
+理由は localhost で oha + 15 next ワーカ + Rust の axum 全コア + Postgres + nginx + php-fpm が
+**同じ CPU を取り合う**ことと、React SSR の絶対コストが Rust の MiniJinja より重い分。
+
+### 軽い画面 GET /（c=20・10s）── もとから飽和していない経路
+
+| stack | single p50(ms) | single RPS | cluster p50(ms) | cluster RPS | RPS 倍率 |
+|---|---|---|---|---|---|
+| lastshot | 0.360 | 54847 | 0.360 | 54917 | 1.00x |
+| next | 12.753 | 1547 | 4.459 | 4159 | **2.7x** |
+| laravel | 10.674 | 1869 | 11.506 | 1733 | 0.93x |
+
+### 薄い JSON POST /api/increment（c=20・10s）── React を挟まない経路
+
+| stack | single p50(ms) | single RPS | cluster p50(ms) | cluster RPS | RPS 倍率 |
+|---|---|---|---|---|---|
+| lastshot | 0.446 | 40942 | 0.443 | 41106 | 1.00x |
+| next | 2.872 | 7255 | 1.217 | 14957 | **2.1x** |
+| laravel | 10.920 | 1829 | 11.786 | 1670 | 0.91x |
+
+### 読み筋
+
+- **重い SSR ほど多重化の効きが大きい**: /report = 6.7x、/ = 2.7x、POST = 2.1x。
+  cluster の利得は「**1 プロセス時にどれだけ CPU 上限で詰まっていたか**」の関数。
+  /report の single は p50 646ms、CPU 1 コアに張り付いて完全に直列化していた典型例。
+  軽い / や薄い POST はもともと飽和していないので、台数を増やしても CPU 余地ぶんしか効かない。
+- **逆転は起きていない**: 重い画面ですら lastshot は依然 14 倍速い。多重化は「1 言語/ランタイムの
+  上限を引き上げる」だけで、ランタイム差そのものはなくならない。Laravel も /report で 949 RPS と、
+  cluster 化した Next の 208 RPS より速い（php-fpm 30 ワーカが効いている / Blade の SSR が React より軽い）。
+- **同一マシン同時計測の弊害**: cluster 計測中の Laravel は RPS が single 計測時より少し下がっている
+  （1536 → 949 等）。これは next が 15 ワーカで CPU を奪った副作用で、絶対値ではなく **同一行内の
+  single vs cluster の差** で読むのが正解。
+- **「PM2 cluster は事実上必須」という結論にはしない**: lastshot リポジトリのこのベンチが
+  「**素のアーキテクチャでの比較**」を意図しているため、本表は `prod-cluster` を**追加実験**として
+  並置し、本来の比較対象（`./run prod` = 1 Node プロセス）は据え置く。実運用で Next.js を出すなら
+  まず PM2 cluster や Vercel/Cloud Run のような前段多重化を入れる、という運用上の結論はここに残す。
+
+### 再現コマンド
+
+```sh
+# それぞれ別ターミナルで
+(cd ../lastshot         && ./run release)
+(cd ../lastshot-next    && ./run prod-cluster)   # ← PM2 cluster × 15 ワーカ
+(cd ../lastshot-laravel && ./run prod)
+
+# 計測（CONN=20 で同じ瞬間に撃つ）
+CONN=20 DURATION=10s ./run all
+CONN=20 DURATION=10s ROWS=1000 ./run report
+```
+
+`INSTANCES`（既定 15）と `PG_POOL_MAX`（既定 4。15×4=60 < PostgreSQL の `max_connections=100`）は
+`lastshot-next/run` の env で上書き可。`single` 版は `./run prod` に戻して同じ計測を回す。
+
 ## 結論（この実測が言っていること）
 
 - **DB がサブ ms で返る条件では、差はアプリ層でつく。** 同じ DB・同じ SQL なのに GET の

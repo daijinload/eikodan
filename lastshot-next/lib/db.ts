@@ -10,13 +10,16 @@
 import { Pool } from "pg";
 
 function makePool(): Pool {
+  // PM2 cluster で N ワーカ起動するときは PG_POOL_MAX を絞る(N × max が
+  // PostgreSQL の max_connections=100 を超えないように)。
+  const max = parseInt(process.env.PG_POOL_MAX ?? "8", 10) || 8;
   const url = process.env.DATABASE_URL;
-  if (url) return new Pool({ connectionString: url, max: 8 });
+  if (url) return new Pool({ connectionString: url, max });
   return new Pool({
     host: process.env.PGHOST ?? "/tmp", // unix ソケットのディレクトリ
     user: process.env.PGUSER ?? process.env.USER,
     database: process.env.PGDATABASE ?? "lastshot",
-    max: 8,
+    max,
   });
 }
 
