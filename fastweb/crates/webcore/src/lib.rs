@@ -20,7 +20,10 @@ impl AppState {
     /// 複数のテンプレートルート（appのshell + 各featureの `templates/`）を
     /// 横断検索するローダを構築する。debugビルドではファイル変更を監視し、
     /// 保存のたびに再読み込みする（再コンパイル不要）。
-    pub fn new(template_dirs: Vec<PathBuf>) -> Self {
+    ///
+    /// `css_built` は base.html のCSS切替に使う実行時フラグ（true=CLI生成の /static/app.css、
+    /// false=CDN）。全テンプレ共通の表示分岐なのでグローバルに載せる（各ハンドラのctxに通さない）。
+    pub fn new(template_dirs: Vec<PathBuf>, css_built: bool) -> Self {
         let reloader = AutoReloader::new(move |notifier| {
             let dirs = template_dirs.clone();
             for dir in &dirs {
@@ -29,6 +32,8 @@ impl AppState {
             notifier.set_fast_reload(true);
 
             let mut env = Environment::new();
+            // 再読込のたびにenvを作り直すので、グローバルもそのつど載せ直す。
+            env.add_global("css_built", css_built);
             // 複数ルートを順に探す自前ローダ。最初に見つかったファイルを使う。
             env.set_loader(move |name| {
                 for dir in &dirs {
