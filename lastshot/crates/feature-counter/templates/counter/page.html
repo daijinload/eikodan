@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}counter — lastshot{% endblock %}
+{% block content %}
+{# 超シンプル画面: 数字 + 「+1」ボタンだけ。値は DB(counter テーブル)に保存。 #}
+<div class="hero min-h-[60vh]">
+  <div class="hero-content text-center">
+    <div>
+      {# #count の中身(数字)だけを HTMX で差し替える。フラグメントは counter/count.html。 #}
+      <div id="count"
+           class="text-7xl font-mono font-bold text-primary tabular-nums">{{ view.value }}</div>
+      <button class="btn btn-primary btn-wide mt-6"
+              hx-post="/increment" hx-target="#count" hx-swap="innerHTML">
+        +1
+      </button>
+      <p class="mt-4 text-xs opacity-50">値は Postgres に保存。再起動しても残ります。</p>
+    </div>
+  </div>
+</div>
+{% endblock %}

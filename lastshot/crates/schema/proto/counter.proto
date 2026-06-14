@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package counter.v1;
+
+// lastshot のサンプル題材: DB に値を保存するだけの超シンプルなカウンター
+// (subsecond-demo のカウンターを HTMX + DB 永続化に置き換えたもの)。
+//
+// CounterView は「画面に出す約束のフィールドだけ」を持つビュー専用メッセージ。
+// この1つの型が、
+//   - minijinja テンプレートに渡る型(画面の数字)
+//   - HTML 末尾に埋め込む JSON の型(「この画面が使ったデータ」)
+//   - Connect API (GetCount / Increment) の返り値型
+// を兼ねる。スキーマを変えれば3経路すべてが同時に変わる(スキーマファースト)。
+service CounterService {
+  // 現在値を返す。
+  rpc GetCount(GetCountRequest) returns (CounterView);
+  // 値を +1 して、増えた後の値を返す(DB の UPDATE ... RETURNING)。
+  rpc Increment(IncrementRequest) returns (CounterView);
+}
+
+message GetCountRequest {}
+
+message IncrementRequest {}
+
+message CounterView {
+  // int32 にしておくと proto3 JSON でも素直な数値になる(int64 は文字列化される)。
+  int32 value = 1;
+}

@@ -1,0 +1,35 @@
+# bacon: 保存のたびに check / 再起動を回す開発ループ。
+# 使い方:
+#   bacon            # デフォルト(check)。型エラーが即返る
+#   bacon clippy
+#   bacon run        # サーバーを起動し、変更で再起動（ソケットは切れる）
+#   bacon serve      # systemfd 同梱で再起動（要 `cargo install systemfd`）
+#                    # 注: この配置では接続断は消えない（kill_then_restart が systemfd ごと殺すため）。
+#                    #     接続を切らさず再起動したいなら systemfd を bacon の外側に常駐させる。実測は ./COLD-START.md
+#
+# テンプレ/CSS/HTMX属性の変更はサーバー再起動すら不要（minijinja-autoreload + tower-livereload）。
+
+default_job = "check"
+
+[jobs.check]
+command = ["cargo", "check", "--all-targets", "--color", "always"]
+need_stdout = false
+
+[jobs.clippy]
+command = ["cargo", "clippy", "--all-targets", "--color", "always"]
+need_stdout = false
+
+[jobs.run]
+command = ["cargo", "run", "-p", "app", "--color", "always"]
+need_stdout = true
+background = false
+on_change_strategy = "kill_then_restart"
+
+# systemfd 同梱で再起動。要 systemfd。
+# 注: この配置（systemfd を bacon ジョブ内に置く）では kill_then_restart が systemfd ごと殺すため
+#     ソケットは引き継げず、接続断は plain な再起動と同じ。詳細・実測は ./COLD-START.md。
+[jobs.serve]
+command = ["systemfd", "--no-pid", "-s", "http::3000", "--", "cargo", "run", "-p", "app"]
+need_stdout = true
+background = false
+on_change_strategy = "kill_then_restart"

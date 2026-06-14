@@ -1,0 +1,29 @@
+# CSSパージで「黙って消える」危険パターンの静的検出。
+# CDN(ブラウザJIT)では何でも生成されるので開発中は気づけない。本番＝CLIパージで初めて消える。
+# その差を埋めるゲート（assets/check-css.sh から呼ぶ。push前の節目に回す）。
+rules:
+  - id: tailwind-dynamic-class-composition
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      class属性内に {{ }} がある＝動的合成クラス。CLIのパージはリテラルしか拾えず、
+      この種のクラスは本番ビルドで消える（CDNでは動くので開発中に気づけない）。
+      完全形のクラスを {% if cond %}text-error{% else %}text-success{% endif %} のように
+      分岐して書くこと。詳細は CLAUDE.md「クラス名は常に完全な形で書く」。
+    paths:
+      include:
+        - "*.html"
+    # class="… {{ … }}" のように class 値の中に {{ が現れるものだけを対象（{% if %} 分岐は対象外）。
+    pattern-regex: 'class\s*=\s*"[^"]*\{\{'
+
+  - id: tailwind-class-in-rust
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      .rs にクラス付きHTML/クラス文字列がある。input.css は source(none) でテンプレHTMLのみ走査するため、
+      Rust側のクラスは走査外＝無スタイルになり、変更のたび再ビルドも要る。
+      HTMLはテンプレに置き state.render("feature/部品.html", …) で返すこと（PR #10 / CLAUDE.md）。
+    paths:
+      include:
+        - "*.rs"
+    pattern-regex: 'class\s*=\s*\\?"'

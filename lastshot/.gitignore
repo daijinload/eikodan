@@ -1,0 +1,13 @@
+# Rust
+target/
+**/*.rs.bk
+
+# env
+.env
+
+# CSSビルド一式（assets/setup-css.sh で取得。バイナリ + リリース成果物）
+assets/tailwindcss
+assets/daisyui.mjs
+assets/daisyui-theme.mjs
+# CLI生成のCSS（開発時は --watch が生成、納品時は生成してから release ビルド）
+crates/app/static/app.css

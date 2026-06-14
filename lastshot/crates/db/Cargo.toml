@@ -1,0 +1,13 @@
+[package]
+name = "db"
+version = "0.1.0"
+edition = "2021"
+
+# Postgres 接続プールを 1 つ持つ薄いレイヤ。アプリ全体で共有する。
+# クエリは sqlx のランタイム API(`sqlx::query`)で書く方針なので、`query!` 系の
+# コンパイル時検証マクロ用フィーチャ(macros)は入れない ── ビルド時に DB 接続を
+# 要求せず、fastweb 由来のビルド速度を保つため(CLAUDE.md「DB作法」)。
+# TLS は使わない(開発=unixソケット / 本番=compose 同一網)。default-features を
+# 切って native-tls(openssl)を引き込まない。
+[dependencies]
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "postgres"] }

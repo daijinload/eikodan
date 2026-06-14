@@ -1,0 +1,16 @@
+/* Tailwind v4 + daisyUI v5 の入力CSS（スタンドアロンCLIで本番と同じエンジンで生成する）。
+ * 出力 → crates/app/static/app.css を app が /static/app.css で配信する。
+ * 監視: ./assets/tailwindcss -i assets/input.css -o crates/app/static/app.css --watch
+ *
+ * source(none) で自動検出を切り、走査対象をテンプレHTMLだけに限定する。
+ * → クラスの出どころはテンプレHTMLのみ。Rustにクラス付きHTMLを書かない方針（ノービルド最優先）と一致し、
+ *   うっかり書くと (1)再ビルドが要る (2)走査外で無スタイル、の二重で気づける（ガードレール）。
+ *   動的合成（text-{{ color }}-500 等）も走査できないので従来どおり禁止。 */
+@import "tailwindcss" source(none);
+
+/* クラス名の出どころは各featureのテンプレHTMLのみ */
+@source "../crates/**/templates/**/*.html";
+
+@plugin "./daisyui.mjs" {
+  themes: light --default, dark --prefersdark;
+}

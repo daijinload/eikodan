@@ -1,0 +1,36 @@
+# app + postgres を同一ネットワークで起動して結合確認する（ローカル統合 / `./run up`）。
+# 停止は `./run down`（= docker compose down -t 0 / 即SIGKILL・使い捨て前提）。
+#
+# 接続は本番/CI と同じ DATABASE_URL の TCP（compose 同一網）。開発既定の unix ソケット
+# （pg-bench の結論で最速）とは別経路で、db::connect() が DATABASE_URL の有無で分岐する。
+# データボリュームは持たない（使い捨て前提 ── down のたびに消え、up で migrations が冪等に再適用される）。
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: lastshot
+      POSTGRES_PASSWORD: lastshot
+      POSTGRES_DB: lastshot
+    # migrations/*.sql を初回起動時に流す（schema.sql → seed.sql のアルファベット順）。
+    # どちらも冪等（create table if not exists / on conflict do nothing）。
+    volumes:
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lastshot -d lastshot"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      # compose 同一網の postgres へ TCP 接続（db::connect() が DATABASE_URL を優先）。
+      DATABASE_URL: postgres://lastshot:lastshot@postgres:5432/lastshot
+      # Dockerfile 既定の HOST=0.0.0.0 / PORT=3000 を使う（外から到達できるように）。
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
