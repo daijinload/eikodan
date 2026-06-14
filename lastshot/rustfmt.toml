@@ -1,0 +1,14 @@
+# Rust の整形ルール（cargo fmt）。
+#
+# directory-layout.md 方針: rustfmt.toml は「自動探索アンカー」なので workspace ルート
+# （= lastshot 直下）に置く。cargo fmt も rust-analyzer（保存時整形）も crate→workspace を
+# 上方向に探索するため、ここ以外（例: lint/ 配下）に動かすと効かなくなる。
+# このため直下に置くのは rustfmt.toml だけに留め、他の lint/fmt 設定・スクリプトは lint/ に集約する。
+#
+# group_imports / imports_granularity は unstable オプションで nightly rustfmt が要る
+# （rust-toolchain.toml で channel = nightly に固定済み）。
+edition = "2021"
+
+# import を std / 外部crate / 自crate でグループ分けし、クレート単位でまとめる。
+group_imports = "StdExternalCrate"
+imports_granularity = "Crate"

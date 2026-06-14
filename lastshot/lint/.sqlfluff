@@ -1,0 +1,9 @@
+[sqlfluff]
+# migrations は Postgres（pg-bench / db クレートの結論）なので方言を合わせる。
+dialect = postgres
+# 素の .sql をそのまま扱う（Jinja テンプレ展開は無効）。
+templater = raw
+# 意図的な設計に合わせてルールを外す（buf の except と同じ考え方）:
+#   RF04 = キーワードを識別子に使うな。だが counter.value 列は proto の CounterView.value
+#   （スキーマファーストの単一真実）に名前を揃えるのが要件。設計側を正としてこのルールだけ外す。
+exclude_rules = RF04

@@ -1,0 +1,19 @@
+# proto の lint / format ルール（buf）。
+# directory-layout.md 方針: proto モジュールの自動探索アンカーなので proto と同居させ、
+# buf はこのフォルダから動かす（関心事が自己完結する）。lint/check.sh もここに cd して叩く。
+version: v2
+modules:
+  - path: .
+lint:
+  use:
+    - STANDARD
+  except:
+    # counter.proto をフラット配置（crates/schema/proto/counter.proto, package counter.v1）に
+    # 保つため、パッケージ名とディレクトリ階層の一致チェックは除外する
+    # （counter.v1 を counter/v1/ に並べ替える構成は本リポの範囲外）。
+    - PACKAGE_DIRECTORY_MATCH
+    # スキーマファーストの掟（CLAUDE.md）: ビュー専用メッセージ CounterView を GetCount /
+    # Increment の両レスポンスで共有する。これは意図的な設計なので、buf STANDARD の
+    # 「RPC ごとに固有の req/res 型を持て」「res 型は <Method>Response と名付けよ」は除外する。
+    - RPC_REQUEST_RESPONSE_UNIQUE
+    - RPC_RESPONSE_STANDARD_NAME
