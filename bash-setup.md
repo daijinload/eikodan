@@ -34,13 +34,15 @@
 
 ## 結論（最初にこれだけ）
 
-`/bin/bash`（3.2）を置き換えるのではなく、**PATH で brew の bash(5.x) を先に出す**のが正解。
-やることは次の2つ。
+**ゴール：Linux と同じ感覚で「bash 5.x をデフォルトの開発シェル」にする。**
+`/bin/bash`（3.2）は置き換えず共存させたまま、brew の bash 5.x を上に被せる。やることは3つ。
 
 1. `brew install bash` で 5.x を入れる
-2. `~/.bashrc` の先頭付近に `eval "$(/opt/homebrew/bin/brew shellenv)"` を入れて PATH 優先にする
+2. それを `/etc/shells` に登録して `chsh` でログインシェルにする
+3. `~/.bashrc` に `eval "$(/opt/homebrew/bin/brew shellenv)"` を入れて PATH 優先にする
 
-これで `bash` も `env bash` スクリプトも 5.x を使う。
+これでログインシェルも、`bash` と打ったサブシェルも、`env bash` スクリプトも全部 5.x になる。
+（下の「[セットアップ手順（ゼロから一式）](#セットアップ手順ゼロから一式)」をそのままなぞればOK）
 
 ## 仕組み：3つの経路は別物
 
@@ -64,22 +66,61 @@ Homebrew の PATH 登録が `/etc/paths.d/homebrew` 経由だと、macOS の `pa
 その結果、brew bash が入っていても探索順で `/bin/bash`(3.2) に負ける。
 だから `.bashrc` で明示的に **前へ** 出す必要がある。
 
-## セットアップ手順
+## セットアップ手順（ゼロから一式）
+
+新しい mac でも、これを上から順に実行すれば「bash 5.x をデフォルト開発シェル」にできる。
+以下は Apple Silicon（`/opt/homebrew`）前提。Intel Mac は `/opt/homebrew` を `/usr/local` に読み替える。
+
+### 0. Homebrew を入れる（未導入なら）
 
 ```bash
-# 1. brew で最新 bash を入れる
-brew install bash
+# 既に brew があるか確認
+command -v brew && brew --version
 
-# 2. (任意) ログインシェルにもしたい場合だけ
-#    /etc/shells に登録 → chsh
-echo /opt/homebrew/bin/bash | sudo tee -a /etc/shells
-chsh -s /opt/homebrew/bin/bash
-
-# 3. ~/.bashrc の先頭付近に追記（PATH 優先：ここが肝）
-#    eval "$(/opt/homebrew/bin/brew shellenv)"
+# 無ければ公式インストーラ
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
 
-`~/.bashrc` 該当箇所:
+インストール直後は brew に PATH が通っていないので、案内に従い（または手動で）一度通す:
+
+```bash
+eval "$(/opt/homebrew/bin/brew shellenv)"
+```
+
+### 1. brew で最新 bash を入れる
+
+```bash
+brew install bash
+
+# 入った場所とバージョンを確認
+brew --prefix bash            # → /opt/homebrew/Cellar/bash/5.x.x
+/opt/homebrew/bin/bash --version | head -1   # → GNU bash, バージョン 5.x
+```
+
+### 2. ログインシェルを brew bash にする
+
+ログインシェルに使えるのは `/etc/shells` に登録されたシェルだけ。まず登録してから `chsh`。
+
+```bash
+# /etc/shells に追記（重複登録しないようにチェック）
+grep -qxF /opt/homebrew/bin/bash /etc/shells || \
+  echo /opt/homebrew/bin/bash | sudo tee -a /etc/shells
+
+# ログインシェルを変更（パスワードを聞かれる）
+chsh -s /opt/homebrew/bin/bash
+
+# 確認（OS設定が書き換わっているか）
+dscl . -read ~/ UserShell    # → UserShell: /opt/homebrew/bin/bash
+```
+
+> ⚠️ `/etc/shells` に **無いパスを `chsh` すると失敗する**。必ず登録を先に。
+> 反映はターミナルを開き直してから（既存の窓には効かない）。
+
+### 3. ~/.bashrc で PATH 優先にする（ここが肝）
+
+ログインシェルを変えても、`bash` と打ったサブシェルや `env bash` スクリプトは
+PATH 探索で 3.2 に戻りうる（理由は「[なぜ放っておくと 3.2 が勝つのか](#なぜ放っておくと-32-が勝つのか)」）。
+`~/.bashrc` の **先頭付近** に次を入れて `/opt/homebrew/bin` を前へ出す:
 
 ```bash
 # brew のコマンド(bash 5.x 等)をシステム標準(/bin の 3.2)より優先する
@@ -87,6 +128,14 @@ eval "$(/opt/homebrew/bin/brew shellenv)"
 ```
 
 反映は新しいターミナル、または `source ~/.bashrc`。
+
+> 補足：`~/.bash_profile` がある場合、その中で `~/.bashrc` を読んでいるか確認する
+> （macOS はログインシェルだと `.bash_profile` を読み、`.bashrc` は自動では読まないため）。
+> 無ければ `.bash_profile` の先頭に下記を入れておくと、対話シェルでも確実に `.bashrc` が効く:
+>
+> ```bash
+> [ -f ~/.bashrc ] && . ~/.bashrc
+> ```
 
 ## 確認
 
