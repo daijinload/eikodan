@@ -119,7 +119,21 @@ migrations/V20260614153500__seed_counter.sql    # 初期行 id=1, value=0
 ./run watch               # bacon（既定=check）: 保存で型チェックを回す。サーバ起動/再起動はしない
 ./run dev                 # サーバ起動（保存後に手で叩き直す）。bacon run/serve で再起動運用も可
 ./run check               # cargo check --workspace（型エラーを最速で拾う）
+./run release             # 本番相当(stable + release + 本番CSS)でローカル起動（後述「3つのモード」）
 ```
+
+### 3つのモード（CSS × ツールチェイン）
+
+| モード | コマンド | CSS | ツールチェイン/プロファイル | 用途 |
+|---|---|---|---|---|
+| 高速開発 | `./run dev` | CDN（ブラウザJIT・ビルドゼロ） | nightly / debug | 日常の作業（7〜8割） |
+| CSSビルド開発 | `CSS=built ./run dev` | CLI生成 `/static/app.css` | nightly / debug | 本番CSSの最終目視（往復で再ビルドしない） |
+| **リリース** | `./run release` | CLI生成（minify・release は常にこちら） | **stable / release** | 本番に出すのと同じ build をローカルで実行 |
+
+`./run release` は **dev=nightly のまま本番だけ stable** にするための入口（Docker と同じ仕組み）:
+`assets/tailwindcss` で本番CSSを minify 生成 → `assets/strip-nightly.sh` で Cargo.toml の nightly 専用行を
+一時的に剥がす（`trap` で必ず復元） → `RUSTUP_TOOLCHAIN=stable RUSTFLAGS="" cargo run --release -p app`。
+DB は dev と同じ native（`./run db-setup` 済み前提）。`./run css-setup` でTailwindを取得していること。
 
 > Rust 変更の反映は再ビルド + プロセス再起動で約1秒（体感の端から端は ~1.2〜1.3s）。
 > cold start の正体・短縮策（codesign / systemfd / リンカ）の実測は [`COLD-START.md`](./COLD-START.md)。
