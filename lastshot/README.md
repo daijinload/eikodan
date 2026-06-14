@@ -208,10 +208,18 @@ cd ../dan2/lastshot   # 例: dan2 worktree へ
 ## CI / コンテナ
 
 ```sh
+./run ci                  # CI(lastshot-ci.yml)をローカルで一気通し（手元でCIを再現）
 ./run up                  # app + postgres を docker compose 同一網で起動（DATABASE_URL=TCP）
 ./run down                # = docker compose down -t 0（即 SIGKILL / 使い捨て前提）
 ```
 
+- `./run ci`: CI と同じ流れ（build(release) → CSSゲート → 起動 → `test-http` → ブラウザE2E）を
+  手元で一気通しする。接続は CI と同じ **TCP**（`DATABASE_URL` 優先 ＝ 開発既定の unix ソケットでなく
+  compose 同一網作法）。postgres は使い捨てコンテナを **worktree ごとのポート**（`5432+slot`）で立て、
+  migration は CI と同じ Flyway（`db-migrate` を `--network=host` で使い捨て pg に向ける）で適用。
+  終了時に `trap` で必ずアプリ停止＋コンテナ破棄（`docker rm -f` ＝ 即 SIGKILL）。dan1〜dan4 を並列で
+  回しても衝突しない。内部の段階（`build-release` / `ci-db-up` / `ci-migrate` / `ci-app-start` /
+  `ci-app-wait` / `ci-app-stop` / `ci-db-down`）も個別タスクとして手で叩ける（`./run help` 参照）。
 - `compose.yml` + `Dockerfile`: app（release / 本番CSS入り）と postgres:17 と flyway を同一網で起動。
   起動順は postgres(healthy) → flyway(migrate して exit) → app（app は `service_completed_successfully` を待つ）。
   接続は本番/CI と同じ `DATABASE_URL` の TCP。データボリュームは持たない（使い捨て＝down で消え、up で
