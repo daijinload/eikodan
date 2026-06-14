@@ -57,6 +57,27 @@ dev() { # 開発サーバ起動(cargo run -p app / DB必須)
   cargo run -p app
 }
 
+release() { # 本番相当(stable + release)でローカル起動。release は常にCLI生成CSSを配信 / DB必須(devと同じnative)
+  # release は css_built()=常true(main.rs)。本番CSS(/static/app.css)を minify 生成しておく(無いと404)。
+  [ -x assets/tailwindcss ] || {
+    echo "Tailwind未取得: ./run css-setup を先に実行"
+    return 1
+  }
+  ./assets/tailwindcss -i assets/input.css -o crates/app/static/app.css --minify
+  # stable は Cargo.toml の nightly専用行(cargo-features/codegen-backend)をパース時点で蹴る。
+  # 一時的に剥がして必ず元へ戻す。Ctrl-C(INT)/kill(TERM)/端末クローズ(HUP)でも復元するよう全部拾う
+  # (mv は冪等: 二重発火しても _bak は1度きりなので 2回目は no-op)。Docker と同じ strip-nightly.sh を使う。
+  # _bak は local にしない: set -e 等で関数を抜けて EXIT trap が発火すると関数スコープが消え、
+  # set -u 下で $_bak が unbound になり復元 mv ごと飛ぶ(|| true に到達する前に展開エラー)。
+  # global なら EXIT 経路でも束縛が残る。trap 側も ${_bak:-} で未割り当てをガードする。
+  _bak=$(mktemp)
+  cp Cargo.toml "$_bak"
+  trap 'mv -f "${_bak:-}" Cargo.toml 2>/dev/null || true' EXIT INT TERM HUP
+  bash assets/strip-nightly.sh
+  # stable + release。RUSTFLAGS="" が .cargo/config.toml の -Z threads(nightly)/lld を無効化(Docker と同方針)。
+  RUSTUP_TOOLCHAIN=stable RUSTFLAGS="" cargo run --release -p app
+}
+
 check() { # 型チェック(cargo check --workspace)
   cargo check --workspace
 }
