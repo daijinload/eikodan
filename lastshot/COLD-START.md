@@ -16,12 +16,29 @@
 
 ## 反映時間の内訳（実測）
 
+**前提**: ここで言う「ビルド」は**日常の開発ループ ＝ ファイル1個 touch して `cargo build -p app` する増分ビルド**の話。
+フルビルド（`cargo clean` 後）は別物（下の参考表）。
+
 | 区間                                        | 時間                       | 備考                                      |
 | ------------------------------------------- | -------------------------- | ----------------------------------------- |
 | 体感 端から端（保存 → ブラウザ再描画）      | ~1.2〜1.3s                 | ブラウザ側 livereload 再接続+再描画を含む |
 | └ ビルド（touch → 再リンク）                | ~0.74s                     | rustc コンパイルが支配的                  |
 | └ サーバ cold start（exec → `"listening"`） | ~0.285s                    | macOS 初回起動セキュリティ検証（下記）    |
 | └ 残り                                      | ブラウザ側の再接続・再描画 |                                           |
+
+### 参考: フルビルド・no-op の実測（増分ビルドとの対比）
+
+`.cargo/config.toml` のデフォルト設定（nightly + lld + `-Z threads=8` + sccache）で `cargo build -p app` を計測:
+
+| シナリオ                                            | 時間          | 備考                                                                       |
+| --------------------------------------------------- | ------------- | -------------------------------------------------------------------------- |
+| **フルビルド**（`cargo clean` 後、sccache は warm） | **~13s**      | 重い依存は sccache から返るので大半は workspace クレートの再 rustc + リンク |
+| **増分ビルド**（`app/main.rs` を1ファイル touch）   | ~0.6s         | 上の表の「ビルド 0.74s」と同区間（ばらつきあり）                            |
+| **no-op**（変更なしで `cargo build`）              | ~0.1s         | cargo のフィンガープリント検査だけ                                          |
+
+**ポイント**: 日常の dev ループは増分ビルド側（~0.6〜0.7s）で回るので、約1秒の底もそちらの話。フルビルドが
+13s で済むのは sccache が重い依存をキャッシュから返しているおかげ（sccache が空っぽの「真の初回」だと数分）。
+ブランチ切替で deps が変わった時や `cargo clean` した直後は 13s 払う、を想定しておくとよい。
 
 ## cold start の正体（なぜ exec→listening に 0.28s かかるか）
 
@@ -33,7 +50,7 @@
 - `DYLD_PRINT_STATISTICS` は macOS 26 で出力抑止されログ取得不可のため、`main.rs` 側の時刻計測で確認した。
 - これは `db::connect()` ではない（DB プール生成は ~10ms 程度）。cold start は pre-main のセキュリティ検証。
 
-## 検証した3手
+## 検証した施策一覧
 
 ### ① codesign `-f -s -`（build 後に署名し直す）→ ◎ 効く
 
@@ -70,6 +87,137 @@
 
 インクリメンタル再リンク時間: **lld ~0.70s ≈ apple-ld ~0.69s**、ld-classic ~0.80s（むしろ遅い）、`wild` は Linux 専用。
 ビルド時間は rustc のコンパイルが支配的で、**lld は既に最速。変える余地なし**。
+
+### ④ 並列フロントエンド `-Z threads=N` の最適値 → ✗ レバーにならない（8で十分／むしろ大は悪化）
+
+**問い**: 15コア機（Apple Silicon M4 Max 相当、perf 5 + eff 10）なら `threads=8` より大きくしたら速くなるのか。
+**答え**: ならない。incremental は完全フラット、full rebuild は **12,16 で逆に悪化**する。
+
+`crates/app/src/main.rs` を毎回マーカー追記して `cargo build -p app` を 3 試行ずつ、`RUSTFLAGS` で `threads=N` を振った実測:
+
+| threads | incremental avg (3試行)   | settle (新 rustflags でフル再ビルド・参考) |
+| ------: | ------------------------: | -----------------------------------------: |
+|       1 | **0.471s** (0.467〜0.473) | 27.7s                                      |
+|       2 | 0.479s (0.477〜0.482)     | 28.3s                                      |
+|       4 | 0.484s (0.480〜0.489)     | 29.0s                                      |
+|       8 | 0.483s (0.481〜0.485)     | （warm-up と同 rustflags のためキャッシュ） |
+|      12 | 0.494s (0.493〜0.497)     | 37.8s ← 悪化                               |
+|      16 | 0.489s (0.486〜0.493)     | **53.1s ← 大幅悪化**                       |
+
+- **incremental は 0.47〜0.49s でほぼフラット**（差 23ms はノイズレベル、むしろ N 大で微増）。
+- 理由: lastshot の各クレートは小さい（`app` 159行、`webcore` 204行、他は 50〜70行）。
+  rustc 内の並列フロントエンドは **「1クレートを何スレッドで型チェック/codegenするか」** で効くが、
+  対象が小さいと並列化する仕事自体が無い。incremental は触ったクレート 1 つしか rustc が走らないので、ここが効かない。
+- full rebuild は **cargo のクレート並列 (`-j15`) × `-Z threads=N` のオーバーサブスクライブ**で N=12,16 が悪化。
+  15コアに対し「クレート 15並列 × フロントエンド 16」だと 240 スレッド要求、コンテキストスイッチで自滅。
+
+**結論**: `threads=8` は妥当（というか「外しても変わらない」が実測上の正解）。15コアあっても上げる意味はなく、
+むしろ上げると full rebuild が遅くなる。`.cargo/config.toml` の `-Z threads=8` は現状維持。
+
+#### なぜ「効かないのに残す」のか — 伸び代の保険
+
+今は効かないが、**1クレートが育ったときに勝手に効き始める保険**として置いておく価値はある:
+
+- rustc の並列フロントエンドは「1クレート内の型チェック / borrow check / MIR / codegen をスレッド分割」する仕組み。
+  対象クレートが**数千行クラス**になってきた所から効き始める（今の lastshot は最大でも `webcore` 204行で全く足りない）。
+- lastshot は **package by feature** でクレートを細かく割る設計なので暴発しにくいが、feature が機能を抱え込んで
+  500 → 2000 行と育つことは普通にある。その時 `threads=8` は何もしなくても勝手に効き始める。
+- **N=8 はオーバーサブスクライブの安全圏でもある**: 15コアで `cargo -j15` と掛け合わせても、依存グラフの幅
+  ボトルネックにより同時に走る rustc は通常数個。瞬間最大 `8 × 数個 = 数十スレッド` で 15コアで捌けるレンジ。
+  N=16 にすると `16 × 数個 = 50+ スレッド` でコンテキストスイッチが効いて自滅する（上の N=16 で 53s に悪化したのがこれ）。
+
+つまり **「今は効かないが害もなく、伸び代を捨てない」設定**。実測値が変わったら（クレートが育ったら）見直す。
+
+#### 再現方法
+
+`RUSTFLAGS="-C link-arg=-fuse-ld=<lld> -Z threads=N" cargo build -p app` で
+`crates/app/src/main.rs` にユニークなマーカーを足して毎回 build を強制し、`time` で計測。
+N を変えると rustflags が変わって sccache miss するので、settle として 1 回フル再ビルドしてから incremental を 3 試行。
+
+### ⑤ Cranelift codegen-backend（`codegen-backend = "cranelift"`）→ ✗ 現状効かない（残しても害は無い）
+
+nightly 限定機能。**dev プロファイルの workspace 自前クレートだけ** Cranelift でコード生成（依存は LLVM 強制）。
+Cargo.toml の `[profile.dev]` で配線:
+
+```toml
+[profile.dev]
+opt-level = 0
+codegen-backend = "cranelift"        # 自前クレート
+
+[profile.dev.package."*"]
+opt-level = 3
+codegen-backend = "llvm"             # 依存は LLVM（opt-3 の最適化を活かす）
+```
+
+実測（[`fastweb/BENCHMARK.md`](../fastweb/BENCHMARK.md) ②③、小クレート構成 / 巨大1クレート構成の両方）:
+**cranelift on/off で差はノイズ（±5% 以内）**。`{cranelift on/off} × {threads on/off}` の 2×2 でフル/増分とも測ったが、
+有意差は `-Z threads` の方だけから来る。
+
+#### なぜ効かないのか
+
+Cranelift は **rustc パイプラインの最終段（コード生成: LLVM IR → マシンコード）だけを置き換える**。
+今の dev ループはここがボトルネックじゃない:
+
+1. **opt-level=0 では LLVM が既に "fast path"**（最適化パスを全部スキップ）。LLVM at opt-0 と Cranelift の差は元々小さい。
+   Cranelift の本領は「opt-2/3 を opt-0 並みに速く」だが、dev でそんな構成にはしない。
+2. **支配項はフロント（型チェック・borrow check・マクロ展開）**。codegen の絶対量が小さいので、そこを速くしても全体は動かない。
+   `-Z threads` がフロントを並列化するのは効くが、Cranelift はフロントに触らない。
+3. **lastshot 固有**: 自前クレートが 50〜200 行と小さく、codegen の絶対量自体が微小。さらに依存は `opt-level=3 + codegen-backend = "llvm"` 強制なので Cranelift は走らない。
+
+#### なぜ残すのか
+
+- **害が無い**（±5% のノイズ範囲、増えも減りもしない）。
+- **「codegen がボトルネックの世界」に変わった瞬間に勝手に効き始める保険**（自前クレートが数千行に育つ、opt-level を上げたデバッグをやる、など）。
+- **本番から確実に剥がす仕組みがある**: `./run release` と Dockerfile が `assets/strip-nightly.sh` で
+  Cargo.toml の `cargo-features` / `codegen-backend` 行を一時的に削除して stable で通す。
+  → 「効かない nightly 機能が本番に漏れる」リスクは閉じている。
+
+`-Z threads=8` と全く同じ位置づけ — **「今は効かないが、伸び代の保険」**。
+
+### ⑥ dev profile の opt-level 非対称（自前=0 / 依存=3）→ ◎ 効いてる本命
+
+dev ループでビルド時間と実行時間の両方を速くする設計判断。Rust の dev デフォルトは全部 `opt-level=0` で、
+依存（axum / tokio / hyper など）まで最適化なしのまま走る → dev 中の HTTP/DB レスポンスが release より
+目立って遅くなる、というのが**「dev デフォルトの罠」**。
+
+**配線**: `Cargo.toml` の `[profile.dev]` で自前と依存をひっくり返す:
+
+```toml
+[profile.dev]
+opt-level = 0                          # 自前 = 毎回再コンパイル → コンパイル時間最短
+codegen-backend = "cranelift"
+
+[profile.dev.package."*"]
+opt-level = 3                          # 依存 = 一度きり → 実行を速く
+codegen-backend = "llvm"
+```
+
+**なぜ非対称が効くのか — コスト構造の非対称性**:
+
+|              | 編集ごと            | コンパイル時間の重さ | 実行時の影響           |
+| ------------ | ------------------- | -------------------- | ---------------------- |
+| 自前コード   | **毎回再コンパイル** | 毎回払う             | 規模小さく支配的でない |
+| 依存クレート | 一度ビルドして固定  | 初回1回のみ          | dev ループ中ずっと響く |
+
+→ 自前は opt=0 で再コンパイル時間最短、依存は opt=3 で実行を速く。逆を採ると「毎回払う側を重く、
+一度きりの側を軽く」で両方損する設計になる。
+
+**`codegen-backend` も同じ非対称性で配線**: 自前=`cranelift`（コード生成速い）/ 依存=`llvm`
+（opt=3 の最適化を活かす — Cranelift は強い最適化ができないので opt=3 に当てると逆効果）。
+
+**依存 opt=3 の初回コストは sccache が抱える**: ブランチ切替や `cargo clean` 後でも依存 rustc は
+キャッシュから返るので、実体としては「sccache miss 時のみ払う」（[`fastweb/BENCHMARK.md` ④](../fastweb/BENCHMARK.md)
+で sccache が opt=3 の重物を返すことを実測）。
+
+#### この設計は他の §の暗黙の前提でもある
+
+- **§④ `-Z threads`**: 「自前 opt=0 で codegen は軽い、フロントが支配項」を前提に並列化の効きを議論している。
+- **§⑤ Cranelift**: 「opt=0 では LLVM が既に fast path」「依存は opt=3 + llvm 強制で Cranelift は走らない」
+  が「効かない理由」の根拠そのもの。
+- **sccache**: 「opt=3 の重い依存をキャッシュから返す」がキャッシュ効きの実体。
+
+つまり「効いてる本命」は §④ §⑤ ではなく**この opt-level 非対称設計の方**で、nightly 系（§④ §⑤）は
+その上に乗る伸び代の保険、という構造。
 
 ## ホットパッチ（subsecond / dioxus）を採らない理由
 
