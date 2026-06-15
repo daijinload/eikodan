@@ -56,8 +56,12 @@
 - **「`cargo clean` 後 = 常に 13〜15s」と読むのは間違い** ── sccache キャッシュキーが世代交代したかで意味が
   変わる。普段はほぼ warm に収まる。日常で「`cargo clean` 直後」を踏んでも sccache が他作業のエントリを
   持っていれば実体は cold ではなく半 warm。
-- 詳細な分解（cranelift / -Z threads / lld 個別の効きや sccache warm 同士の差の理由）は
-  [`fastweb/BENCHMARK.md` ⑦](../fastweb/BENCHMARK.md)。
+- **差分ビルド (hot loop) は別軸** ── `touch 1 feature → cargo build -p app` の差分ビルドでは
+  `CARGO_INCREMENTAL=0` 下で **dev nightly+full 0.78s / dev stable+plain 0.63s（5 試行 median、stable が
+  -0.15s/-19%）**。nightly チューニング（cranelift / -Z threads / lld）は **cold 局面に旨味が集中**し、
+  hot loop には微弱に逆効果という非対称が出ている。詳細は [`fastweb/BENCHMARK.md` ⑦](../fastweb/BENCHMARK.md)。
+- 詳細な分解（cranelift / -Z threads / lld 個別の効きや sccache warm 同士の差の理由、incr=OFF + 差分ビルド
+  の追加計測）は [`fastweb/BENCHMARK.md` ⑦](../fastweb/BENCHMARK.md)。
 
 ### 参考: 増分・no-op の実測（フルビルドとの対比）
 
