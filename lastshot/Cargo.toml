@@ -41,8 +41,11 @@ serde_json = "1"
 opt-level = 0
 debug = false # debuginfo生成を省いてコンパイル・リンクを短縮
 # （panicのfile:lineが欲しければ "line-tables-only" に）
-codegen-backend = "cranelift" # 自分のコードは Cranelift で高速コード生成
+codegen-backend = "cranelift" # 自前は Cranelift（保険として残す。dev=opt0 では LLVM が fast path なので差は誤差）
 
 [profile.dev.package."*"]
 opt-level = 0
-codegen-backend = "llvm" # 依存は LLVM（cranelift 切替は別途検証）
+codegen-backend = "cranelift" # 依存も Cranelift で統一（実測で wall 差 ±0.2s = 誤差・CPU は約-10%）
+# 旧構成（依存だけ llvm 強制）を撤回。理由: 自前と依存の backend を揃えるほうが単純で、
+# wall は同等・cargo の並列がコア飽和させるので CPU 減は wall に出ない・fallback warning も無し。
+# 実測根拠: ../fastweb/BENCHMARK.md ⑤「依存も cranelift にできるか」
