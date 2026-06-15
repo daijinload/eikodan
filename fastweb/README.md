@@ -14,7 +14,7 @@
 - **package by feature**: 機能ごとに葉クレートを切り、`cargo check -p <feature>` が一瞬。
 - **nightly チューニング**: lld リンカ / 並列フロントエンド(`-Zthreads`) / Cranelift バックエンド。
   dev profile は依存も自前も `opt-level=0` でフルビルドを最小化する（本番動作速度は `[profile.release]`
-  が opt=3 + LTO で担保するので dev で取りに行かない → 実測根拠 [`BENCHMARK.md`](BENCHMARK.md) ⑤）。
+  が opt-3 で担保するので dev で取りに行かない（本番デプロイで LTO を盛りたければ lastshot 側の `release-max` プロファイル → 実測根拠 [`BENCHMARK.md`](BENCHMARK.md) ⑤⑥）。
 - **sccache**（コンパイルキャッシュ）: 重い依存をキャッシュから返す。incremental は既定ONのまま併用するので、
   日常の差分ビルド/起動の速さはそのまま（→ BENCHMARK.md ④）。
 - **connect-rpc** を同じ axum・同じポートに同居（型付きAPIが必要なとき用）。

@@ -21,7 +21,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 # ───────────────────────────────────────────────────────────
-# devプロファイル: 反復速度に全振り（動作速度は release が opt-3+LTO で担保する）
+# devプロファイル: 反復速度に全振り（動作速度は release が opt-3 で担保。本番デプロイで LTO を盛りたければ lastshot 側 release-max プロファイル参照）
 #   自分のコード  = opt-level 0（毎回再コンパイル＝最速）
 #   依存クレート  = opt-level 0（フルビルドのコストを最小化）
 # 以前は依存だけ opt-level 3 で焼いていたが、cargo clean / 新規checkout / depsが変わるブランチ
