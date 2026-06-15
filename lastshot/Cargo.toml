@@ -29,16 +29,50 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 # ───────────────────────────────────────────────────────────
-# devプロファイル: コスト構造の非対称性を使う
-#   自分のコード  = 毎回変わる   → opt-level 0 で再コンパイル最速
-#   依存クレート  = 一度きり     → opt-level 3 で実行を速く（初回のみのコスト）
+# devプロファイル: 反復速度に全振り（動作速度は release / release-max が担保する）
+#   自分のコード  = opt-level 0（毎回再コンパイル＝最速）
+#   依存クレート  = opt-level 0（フルビルドのコストを最小化）
+# 以前は依存だけ opt-level 3 で焼いていたが、cargo clean / 新規checkout / depsが変わるブランチ
+# 切替のたびに +約11s/-45% のコストを払う一方、dev 動作の便益(+17% throughput)は手元の操作
+# 頻度では体感ゼロ・負荷試験は release でやるので不要 = 撤回した。
+# 実測: ../fastweb/BENCHMARK.md ⑤
 # ───────────────────────────────────────────────────────────
 [profile.dev]
 opt-level = 0
 debug = false # debuginfo生成を省いてコンパイル・リンクを短縮
 # （panicのfile:lineが欲しければ "line-tables-only" に）
-codegen-backend = "cranelift" # 自分のコードは Cranelift で高速コード生成
+codegen-backend = "cranelift" # 自前は Cranelift（保険として残す。dev=opt0 では LLVM が fast path なので差は誤差）
 
 [profile.dev.package."*"]
-opt-level = 3
-codegen-backend = "llvm" # 依存は LLVM で最適化（初回のみのコスト）
+opt-level = 0
+codegen-backend = "cranelift" # 依存も Cranelift で統一（実測で wall 差 ±0.2s = 誤差・CPU は約-10%）
+# 旧構成（依存だけ llvm 強制）を撤回。理由: 自前と依存の backend を揃えるほうが単純で、
+# wall は同等・cargo の並列がコア飽和させるので CPU 減は wall に出ない・fallback warning も無し。
+# 実測根拠: ../fastweb/BENCHMARK.md ⑤「依存も cranelift にできるか」
+
+# ───────────────────────────────────────────────────────────
+# release-max プロファイル: 最大最適化（本番デプロイ向け）
+#   cargo build --release             = Rust 既定の release（opt-3 のみ / LTO 無し / cgu=16）
+#   cargo build --profile release-max = ここで定義（opt-3 + lto=fat + cgu=1）
+# 既定 release の上に重ねる別プロファイルなので、両者を切り替えながらビルドできる
+# （成果物は target/release/ と target/release-max/ に分かれて共存）。
+#
+# 入れていない 2 つ（Web サーバとして不適なので外している）:
+# - strip = "symbols"  ── シンボル表が消えると panic backtrace が関数名でなく
+#   生アドレス（0x10a3f4e）になる。本番の事後解析が困るので保持。`debug = false`
+#   で DWARF（ファイル:行）は元から無いが、シンボルは残せば関数名は出る。
+# - panic = "abort"    ── tokio が axum ハンドラの panic を catch して 500 を返す
+#   挙動が消える（プロセス丸ごと死ぬ）→ in-flight の他リクエストも巻き添え。CLI/
+#   組み込み向けの設定で Web サーバには不適。
+#
+# 実測 (lastshot, stable + RUSTFLAGS="" / `cargo build -p app` / oha -c 50 -z 15s GET /):
+#   release      : 13.0s build / 7.6MB / 53,956 req/sec avg(2試行) / p99 1.15ms
+#   release-max  : 41.9s build / 5.0MB / 55,058 req/sec avg(3試行) / p99 1.11ms
+#   差分         : build 約3.2倍 / バイナリ -34% / throughput +2.0% / p99 -3%
+# バイナリ縮小は strip 無しでも効く（LTO の dead code elimination による）。
+# 詳細・実測手順は BENCHMARK.md ⑥。
+# ───────────────────────────────────────────────────────────
+[profile.release-max]
+inherits = "release"
+lto = "fat"           # クレート跨ぎインライン化（一番効く）
+codegen-units = 1     # ユニット跨ぎ最適化（ビルド時間と引き換え）

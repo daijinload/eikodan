@@ -1,5 +1,7 @@
-# コンパイルキャッシュ。opt-level=3 でビルドされる重い依存(axum/tokio/buffa…)をキャッシュから返し、
+# コンパイルキャッシュ。重い依存(axum/tokio/buffa…)をキャッシュから返し、
 # フル再ビルド(cargo clean / 新規checkout / depsが変わるブランチ切替)を短縮する。
+# （依存は dev でも opt-level=0 に戻したので元ほど重くはないが、それでも数十クレートぶんの
+# 初回コンパイル時間は払うのでキャッシュは有効。詳細: ../fastweb/BENCHMARK.md ④⑤）
 # incremental は既定のON のまま残すこと（CARGO_INCREMENTAL=0 にしない）── 日常の差分ビルド/起動
 # の速さは incremental が担い、sccache はそこには効かない。両者は別レイヤなので併用する。
 # 要 `brew install sccache`（未導入だと "could not execute process sccache" でビルドが失敗する）。
