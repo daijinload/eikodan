@@ -10,7 +10,7 @@
 
 | 要素                                                                                                                                                       | 出自                                 | lastshot での形                         |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | --------------------------------------- |
-| ノービルドUI（axum + HTMX + MiniJinja + daisyUI）+ ホットリロード + package-by-feature + ビルド最適化（nightly/lld/-Zthreads/Cranelift/opt非対称/sccache） | [fastweb](../fastweb/)               | 土台                                    |
+| ノービルドUI（axum + HTMX + MiniJinja + daisyUI）+ ホットリロード + package-by-feature + ビルド最適化（nightly/lld/-Zthreads/Cranelift/dev=opt0/sccache） | [fastweb](../fastweb/)               | 土台                                    |
 | スキーマファースト（`.proto` 単一真実 → 1つの生成型で HTML描画 / `<!-- view-data -->` 埋め込み / Connect API を同源駆動）                                  | [connectweb](../connectweb/)         | 土台                                    |
 | Postgres 永続化（unix ソケット最速 / `query!` マクロ不使用でビルド速度維持）                                                                               | [pg-bench](../pg-bench/)             | `crates/db` + service 層                |
 | サンプル題材（カウンター）                                                                                                                                 | [subsecond-demo](../subsecond-demo/) | `crates/feature-counter`（HTMX + DB化） |
@@ -282,7 +282,7 @@ lastshot/
   run                  bash 関数ディスパッチャ（タスクランナー。./run help で一覧）
   rust-toolchain.toml  nightly + rust-src
   .cargo/config.toml   lld + -Zthreads + sccache（ビルド高速化フラグ）
-  Cargo.toml           workspace（opt非対称 / Cranelift）
+  Cargo.toml           workspace（dev=全クレート opt-level 0 / Cranelift）
   bacon.toml           check / run / serve
   rustfmt.toml         Rust 整形ルール（直下に置く唯一の lint 設定 = cargo fmt の自動探索アンカー）
   assets/              CSSゲート（input.css / setup-css.sh / check-css.sh / semgrep/）+ strip-nightly.sh（本番stable化）
@@ -304,6 +304,6 @@ lastshot/
 ```
 
 高速化フラグの位置は fastweb と同じ（リンカ/threads/sccache=`.cargo/config.toml`、nightly=`rust-toolchain.toml`、
-opt非対称/Cranelift=`Cargo.toml`）。これらは **dev(nightly) 向け**で、**本番(Docker)は stable で焼く**
+dev=全クレート opt-level 0 / Cranelift=`Cargo.toml`）。これらは **dev(nightly) 向け**で、**本番(Docker)は stable で焼く**
 （`RUSTUP_TOOLCHAIN=stable` + `assets/strip-nightly.sh`。上記「結合・本番ビルド」参照）。
 実測根拠は [`fastweb/BENCHMARK.md`](../fastweb/BENCHMARK.md)。

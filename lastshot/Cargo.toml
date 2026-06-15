@@ -29,9 +29,13 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 # ───────────────────────────────────────────────────────────
-# devプロファイル: コスト構造の非対称性を使う
-#   自分のコード  = 毎回変わる   → opt-level 0 で再コンパイル最速
-#   依存クレート  = 一度きり     → opt-level 3 で実行を速く（初回のみのコスト）
+# devプロファイル: 反復速度に全振り（動作速度は release が opt-3+LTO で担保する）
+#   自分のコード  = opt-level 0（毎回再コンパイル＝最速）
+#   依存クレート  = opt-level 0（フルビルドのコストを最小化）
+# 以前は依存だけ opt-level 3 で焼いていたが、cargo clean / 新規checkout / depsが変わるブランチ
+# 切替のたびに +約11s/-45% のコストを払う一方、dev 動作の便益(+17% throughput)は手元の操作
+# 頻度では体感ゼロ・負荷試験は release でやるので不要 = 撤回した。
+# 実測: ../fastweb/BENCHMARK.md ⑤
 # ───────────────────────────────────────────────────────────
 [profile.dev]
 opt-level = 0
@@ -40,5 +44,5 @@ debug = false # debuginfo生成を省いてコンパイル・リンクを短縮
 codegen-backend = "cranelift" # 自分のコードは Cranelift で高速コード生成
 
 [profile.dev.package."*"]
-opt-level = 3
-codegen-backend = "llvm" # 依存は LLVM で最適化（初回のみのコスト）
+opt-level = 0
+codegen-backend = "llvm" # 依存は LLVM（cranelift 切替は別途検証）
