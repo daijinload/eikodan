@@ -50,7 +50,7 @@
 - `DYLD_PRINT_STATISTICS` は macOS 26 で出力抑止されログ取得不可のため、`main.rs` 側の時刻計測で確認した。
 - これは `db::connect()` ではない（DB プール生成は ~10ms 程度）。cold start は pre-main のセキュリティ検証。
 
-## 検証した3手
+## 検証した施策一覧
 
 ### ① codesign `-f -s -`（build 後に署名し直す）→ ◎ 効く
 
@@ -133,6 +133,46 @@
 `RUSTFLAGS="-C link-arg=-fuse-ld=<lld> -Z threads=N" cargo build -p app` で
 `crates/app/src/main.rs` にユニークなマーカーを足して毎回 build を強制し、`time` で計測。
 N を変えると rustflags が変わって sccache miss するので、settle として 1 回フル再ビルドしてから incremental を 3 試行。
+
+### ⑤ Cranelift codegen-backend（`codegen-backend = "cranelift"`）→ ✗ 現状効かない（残しても害は無い）
+
+nightly 限定機能。**dev プロファイルの workspace 自前クレートだけ** Cranelift でコード生成（依存は LLVM 強制）。
+Cargo.toml の `[profile.dev]` で配線:
+
+```toml
+[profile.dev]
+opt-level = 0
+codegen-backend = "cranelift"        # 自前クレート
+
+[profile.dev.package."*"]
+opt-level = 3
+codegen-backend = "llvm"             # 依存は LLVM（opt-3 の最適化を活かす）
+```
+
+実測（[`fastweb/BENCHMARK.md`](../fastweb/BENCHMARK.md) ②③、小クレート構成 / 巨大1クレート構成の両方）:
+**cranelift on/off で差はノイズ（±5% 以内）**。`{cranelift on/off} × {threads on/off}` の 2×2 でフル/増分とも測ったが、
+有意差は `-Z threads` の方だけから来る。
+
+#### なぜ効かないのか
+
+Cranelift は **rustc パイプラインの最終段（コード生成: LLVM IR → マシンコード）だけを置き換える**。
+今の dev ループはここがボトルネックじゃない:
+
+1. **opt-level=0 では LLVM が既に "fast path"**（最適化パスを全部スキップ）。LLVM at opt-0 と Cranelift の差は元々小さい。
+   Cranelift の本領は「opt-2/3 を opt-0 並みに速く」だが、dev でそんな構成にはしない。
+2. **支配項はフロント（型チェック・borrow check・マクロ展開）**。codegen の絶対量が小さいので、そこを速くしても全体は動かない。
+   `-Z threads` がフロントを並列化するのは効くが、Cranelift はフロントに触らない。
+3. **lastshot 固有**: 自前クレートが 50〜200 行と小さく、codegen の絶対量自体が微小。さらに依存は `opt-level=3 + codegen-backend = "llvm"` 強制なので Cranelift は走らない。
+
+#### なぜ残すのか
+
+- **害が無い**（±5% のノイズ範囲、増えも減りもしない）。
+- **「codegen がボトルネックの世界」に変わった瞬間に勝手に効き始める保険**（自前クレートが数千行に育つ、opt-level を上げたデバッグをやる、など）。
+- **本番から確実に剥がす仕組みがある**: `./run release` と Dockerfile が `assets/strip-nightly.sh` で
+  Cargo.toml の `cargo-features` / `codegen-backend` 行を一時的に削除して stable で通す。
+  → 「効かない nightly 機能が本番に漏れる」リスクは閉じている。
+
+`-Z threads=8` と全く同じ位置づけ — **「今は効かないが、伸び代の保険」**。
 
 ## ホットパッチ（subsecond / dioxus）を採らない理由
 
