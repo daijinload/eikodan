@@ -28,26 +28,30 @@
 
 ### 参考: フルビルドの実測（3 構成 × sccache cold/warm）
 
-`cargo clean` 後の `cargo build [--release] -p app` を 3 構成 × cold/warm で計測（lastshot, 2026-06-15）。
-sccache 有効。"stable + 素のツール" = `RUSTUP_TOOLCHAIN=stable RUSTFLAGS=""` で nightly rustflag(`-Z threads`/lld) を
-無効化 + `strip-nightly.sh` で `cargo-features` / `codegen-backend` 行を剥がす（Docker と同条件）:
+`cargo clean` 後の `cargo build [--release] -p app` を 3 構成 × cold/warm で計測（lastshot, 2026-06-15、
+各構成 1 cold + 4 warm = 5 試行、warm は median）。sccache 有効。"stable + 素のツール" =
+`RUSTUP_TOOLCHAIN=stable RUSTFLAGS=""` で nightly rustflag(`-Z threads`/lld) を無効化 + `strip-nightly.sh` で
+`cargo-features` / `codegen-backend` 行を剥がす（Docker と同条件）:
 
-| 構成                                                                   | cold (sccache miss)  | warm (sccache hit、普段の体感) |
-| ---------------------------------------------------------------------- | -------------------- | ------------------------------ |
-| **dev** (nightly + cranelift + `-Z threads=8` + lld + sccache + opt-0) | ~14.6s               | **~6.0s**                      |
-| **dev** (stable + `RUSTFLAGS=""` + sccache + opt-0、素のツール)        | ~17.1s               | **~5.87s**                     |
-| **release** (stable + `RUSTFLAGS=""` + sccache + opt-3)                | ~12.5s ※             | **~6.1s**                      |
+| 構成                                                                   | cold (sccache miss、節目)  | warm (sccache hit、普段の体感、5 試行 median) |
+| ---------------------------------------------------------------------- | -------------------------- | ------------------------------------------------ |
+| **dev** (nightly + cranelift + `-Z threads=8` + lld + sccache + opt-0) | ~12.5s                     | **~6.66s**                                       |
+| **dev** (stable + `RUSTFLAGS=""` + sccache + opt-0、素のツール)        | 12.8〜17.1s ※              | **~6.59s**                                       |
+| **release** (stable + `RUSTFLAGS=""` + sccache + opt-3)                | ~13.4s                     | **~6.84s**                                       |
 
-※ release cold は同セッションで dev stable を先に焼いた直後の値（stable+opt-0 の proc-macro が sccache に
-残っていた分やや甘い）。真に cold なら +1〜2s 上振れ見込みで dev cold と並ぶ。
+※ B (stable dev) cold は順序効果で 12.8〜17.1s に分布する。「真に cold」（前段が nightly のみ、stable+LLVM の
+proc-macro を sccache が持っていない状態）は ~17s、先に他の stable 構成（release 等）を焼いた後だと共有 proc-macro
+が hit して ~12.8s まで圧縮される。日々の体感は warm のほうなので cold の正確な値はそこまで重要ではない。
 
 読み方:
-- **warm（普段の体感）はどれも約 6s で誤差圏** ── 重い依存の opt-3 LLVM 仕事を sccache が返すので、
+- **warm（普段の体感）はどれも約 6.6〜6.8s で誤差圏（±3%）** ── 重い依存の opt-3 LLVM 仕事を sccache が返すので、
   自前クレートの仕事しか残らない。**dev opt-0 と release opt-3 が並ぶのも、nightly フル構成と stable + 素のツールが
   並ぶのも、全部この理由**。`./run release` の体感が dev とほぼ変わらない＝節目で本番相当を気楽に確認できる。
-- **cold は 13〜17s** ── 新規 clone / `cargo clean` 直後 / worktree 新規追加 / toolchain 切替直後 / 大きい
-  deps 更新で当たる。cold 状態だけ nightly が `-Z threads=8` の並列フロントで +17% 速い。普段のループには
-  乗らない差。
+  細かく見ると dev (A,B) ~6.6s / release (C) ~6.84s で +0.25s だけ release が重いが、これは hot loop の意思決定に
+  影響しないレベル。
+- **cold は 12〜17s** ── 新規 clone / `cargo clean` 直後 / worktree 新規追加 / toolchain 切替直後 / 大きい
+  deps 更新で当たる。cold 状態だけ nightly が `-Z threads=8` の並列フロントで「真に cold」の B 17s に対し A 12.5s
+  ＝ +30% 速い（普段のループには乗らない差）。
 - **「`cargo clean` 後 = 常に 13〜15s」と読むのは間違い** ── sccache キャッシュキーが世代交代したかで意味が
   変わる。普段はほぼ warm に収まる。
 - 詳細な分解（cranelift / -Z threads / lld 個別の効きや sccache warm 同士の差の理由）は
