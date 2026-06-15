@@ -26,22 +26,43 @@
 | └ サーバ cold start（exec → `"listening"`） | ~0.285s                    | macOS 初回起動セキュリティ検証（下記）    |
 | └ 残り                                      | ブラウザ側の再接続・再描画 |                                           |
 
-### 参考: フルビルド・no-op の実測（増分ビルドとの対比）
+### 参考: フルビルドの実測（3 構成 × sccache cold/warm）
 
-`.cargo/config.toml` のデフォルト設定（nightly + lld + `-Z threads=8` + sccache）で `cargo build -p app` を計測:
+`cargo clean` 後の `cargo build [--release] -p app` を 3 構成 × cold/warm で計測（lastshot, 2026-06-15）。
+sccache 有効。"stable + 素のツール" = `RUSTUP_TOOLCHAIN=stable RUSTFLAGS=""` で nightly rustflag(`-Z threads`/lld) を
+無効化 + `strip-nightly.sh` で `cargo-features` / `codegen-backend` 行を剥がす（Docker と同条件）:
 
-| シナリオ                                                      | 時間          | 備考                                                                       |
-| ------------------------------------------------------------- | ------------- | -------------------------------------------------------------------------- |
-| **フルビルド**（`cargo clean` 後、sccache **warm**＝普段の状態） | **~6s**       | 重い依存は sccache から返り、自前クレートのコード生成 + リンクが残るだけ      |
-| **フルビルド**（`cargo clean` 後、sccache **cold**＝節目）       | **~14〜15s**  | sccache キャッシュキーが変わった直後（新規 clone / 別 toolchain で焼いた直後等） |
-| **増分ビルド**（`app/main.rs` を1ファイル touch）              | ~0.6s         | 上の表の「ビルド 0.74s」と同区間（ばらつきあり）                            |
-| **no-op**（変更なしで `cargo build`）                          | ~0.1s         | cargo のフィンガープリント検査だけ                                          |
+| 構成                                                                   | cold (sccache miss)  | warm (sccache hit、普段の体感) |
+| ---------------------------------------------------------------------- | -------------------- | ------------------------------ |
+| **dev** (nightly + cranelift + `-Z threads=8` + lld + sccache + opt-0) | ~14.6s               | **~6.0s**                      |
+| **dev** (stable + `RUSTFLAGS=""` + sccache + opt-0、素のツール)        | ~17.1s               | **~5.87s**                     |
+| **release** (stable + `RUSTFLAGS=""` + sccache + opt-3)                | ~12.5s ※             | **~6.1s**                      |
 
-**ポイント**: 日常の dev ループは増分ビルド側（~0.6〜0.7s）で回るので、約1秒の底もそちらの話。フルビルドも
-**普段は sccache warm で約 6s に収まる**（重い依存をキャッシュから返すため、自前クレートの仕事しか残らない）。
-13〜15s 払うのは**節目**: 新規 clone / `cargo clean` 直後 / worktree 新規追加 / toolchain を nightly↔stable で切り替えた直後 /
-大きい deps の更新 ── sccache のキャッシュキーが新しくなって "cold" になった瞬間。sccache が空っぽの「真の初回」だと数分。
-詳細・nightly vs stable / dev vs release の分解は [`fastweb/BENCHMARK.md` ⑦](../fastweb/BENCHMARK.md)。
+※ release cold は同セッションで dev stable を先に焼いた直後の値（stable+opt-0 の proc-macro が sccache に
+残っていた分やや甘い）。真に cold なら +1〜2s 上振れ見込みで dev cold と並ぶ。
+
+読み方:
+- **warm（普段の体感）はどれも約 6s で誤差圏** ── 重い依存の opt-3 LLVM 仕事を sccache が返すので、
+  自前クレートの仕事しか残らない。**dev opt-0 と release opt-3 が並ぶのも、nightly フル構成と stable + 素のツールが
+  並ぶのも、全部この理由**。`./run release` の体感が dev とほぼ変わらない＝節目で本番相当を気楽に確認できる。
+- **cold は 13〜17s** ── 新規 clone / `cargo clean` 直後 / worktree 新規追加 / toolchain 切替直後 / 大きい
+  deps 更新で当たる。cold 状態だけ nightly が `-Z threads=8` の並列フロントで +17% 速い。普段のループには
+  乗らない差。
+- **「`cargo clean` 後 = 常に 13〜15s」と読むのは間違い** ── sccache キャッシュキーが世代交代したかで意味が
+  変わる。普段はほぼ warm に収まる。
+- 詳細な分解（cranelift / -Z threads / lld 個別の効きや sccache warm 同士の差の理由）は
+  [`fastweb/BENCHMARK.md` ⑦](../fastweb/BENCHMARK.md)。
+
+### 参考: 増分・no-op の実測（フルビルドとの対比）
+
+| シナリオ                                          | 時間  | 備考                                          |
+| ------------------------------------------------- | ----- | --------------------------------------------- |
+| **増分ビルド**（`app/main.rs` を1ファイル touch） | ~0.6s | 上の表の「ビルド 0.74s」と同区間（ばらつきあり） |
+| **no-op**（変更なしで `cargo build`）             | ~0.1s | cargo のフィンガープリント検査だけ              |
+
+**ポイント**: 日常の dev ループは増分ビルド側（~0.6〜0.7s）で回るので、約1秒の底もそちらの話。フルビルドが
+warm 6s に収まる事実は「節目で動作確認するときに気楽に待てる」上乗せであって、増分・check（package by feature）の
+hot loop の主役交代ではない（package by feature の効きは [`fastweb/BENCHMARK.md` ③⑦(e)](../fastweb/BENCHMARK.md)）。
 
 ## cold start の正体（なぜ exec→listening に 0.28s かかるか）
 
