@@ -32,8 +32,8 @@ serde_json = "1"
 opt-level = 0
 debug = false            # debuginfo生成を省いてコンパイル・リンクを短縮
                          # （panicのfile:lineが欲しければ "line-tables-only" に）
-codegen-backend = "cranelift"  # 自分のコードは Cranelift で高速コード生成
+codegen-backend = "cranelift"  # 自前は Cranelift（保険。dev=opt0 では LLVM が fast path なので差は誤差）
 
 [profile.dev.package."*"]
 opt-level = 0
-codegen-backend = "llvm"       # 依存は LLVM（cranelift 切替は別途検証）
+codegen-backend = "cranelift"  # 依存も Cranelift で統一（lastshot で wall ±0.2s = 誤差・fallback warning 無しを実測。../fastweb/BENCHMARK.md ⑤）
