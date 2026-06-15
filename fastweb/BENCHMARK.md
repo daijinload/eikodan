@@ -294,6 +294,76 @@ between 0-3, s or z` で cargo がパース時点で拒否する。gcc の `-O9`
 > 可能性もある。意思決定としては「コスト build +30s/回」が許容できれば常時 ON、許容できなければ既定 release のまま、
 > で十分（規模が大きい本番ほど ON が有利）。
 
+## ⑦ フルビルド速度の正体（sccache warm/cold × dev/release × nightly/stable）
+
+①〜③ で dev profile を全クレート opt-0 に統一し、⑥ で release-max を整えた段階で、改めて
+**「現状のフルビルドは結局いくら？」**を分解して測った。意思決定の場面は 3 つの軸で変わる:
+
+1. **sccache の状態**: warm（普段のループ。前回ビルドのキャッシュが残ってる）vs cold
+   （新規 clone / worktree 切替 / sccache パージ / 別 toolchain でのビルドが先に走った直後）
+2. **dev profile (opt-0) vs release profile (opt-3)**
+3. **nightly フル構成 (cranelift + -Z threads + lld) vs stable + 素のツール**
+
+### 計測 (lastshot, 2026-06-15)
+
+- ハーネス: `cargo clean -q && /usr/bin/time -p cargo build [--release] -p app`、各 3 試行
+- sccache 有効（`.cargo/config.toml` の `rustc-wrapper = "sccache"`）、`.cargo/config.toml` の他設定は構成で切替
+- "stable + 素のツール" = `RUSTUP_TOOLCHAIN=stable RUSTFLAGS=""` で nightly rustflag(`-Z threads`/`lld`) を無効化 +
+  `strip-nightly.sh` で `cargo-features` / `codegen-backend` 行を剥がす（Docker と同条件）
+- trial 1 が「cold sccache」(他構成で焼いた直後＝当該キャッシュキーに何も入っていない)、trial 2-3 が「warm sccache」
+
+| 構成 | trial 1 (cold) | trial 2 (warm) | trial 3 (warm) | warm 平均 |
+|---|---|---|---|---|
+| **dev (nightly + cranelift + -Z threads=8 + lld + opt-0)** | 14.64s | 6.05s | 5.96s | **~6.0s** |
+| **dev (stable + RUSTFLAGS="" + opt-0)** | 17.14s | 5.84s | 5.89s | **~5.87s** |
+| **release (stable + RUSTFLAGS="" + opt-3)** | 12.54s ※ | 6.18s | 6.06s | **~6.1s** |
+
+※ release cold は同セッションで「dev stable+plain」を先に焼いた直後なので、stable+opt-0 の proc-macro
+エントリが sccache に残っている分やや甘い数字。真に何も無い cold なら +1〜2s 上振れ見込み（14s 前後で
+dev cold と並ぶ）。
+
+### 読み方
+
+**(a) warm が普段の体感、cold は節目で当たる数字**
+- 普段の dev ループは sccache warm 状態で回っているので、**フルビルドの体感は約 6s**。
+- 13〜15s を払うのは「sccache のキャッシュキーが変わった節目」: 新規 clone / `cargo clean` 直後 /
+  `worktree` を新規追加した直後 / toolchain を nightly↔stable で切り替えた直後 / 大きい deps の更新。
+- 「`cargo clean` 後 = 常に 13s」と書いてある旧表現は不正確（sccache が冷えてるかどうかで意味が変わる）。
+  以前 FAST-RUST.md §1.4 / COLD-START.md に "~13s (sccache が重い依存を返すため)" と書いていたのは
+  実は cold sccache の数字で、warm sccache での説明文と数字がチグハグだった（本 § で修正）。
+
+**(b) warm なら dev opt-0 と release opt-3 がほぼ同じ (6.0s vs 6.1s)**
+- 重い依存の opt-3 LLVM コード生成は sccache が返すので、実 LLVM を回るのは自前クレートだけ。
+  自前が小さければ opt-3 / opt-0 の差が 0.1s レベルに縮む（**lastshot 規模では opt レベルは支配項ではない**）。
+- これが「`./run release` 体感が dev とほぼ変わらない」の正体。本番デプロイ相当を手元で確認するコストが軽い
+  ので、release 検証を節目に挟みやすい（release-max のコスト 42s/回とは桁が違う）。
+
+**(c) warm なら nightly フル構成 vs stable+素のツールが誤差圏 (6.0s vs 5.87s)**
+- cranelift / -Z threads=8 / lld のチューニング合計効果が ±2% で**実測差ほぼゼロ**。lastshot 規模では
+  保険として残しているだけ、という FAST-RUST.md §2.2 の主張が裏取りされた形（同 § が引用する旧記述も
+  この実測を根拠にする）。
+- 効き始める閾値: **-Z threads** は「1 クレートが巨大化したフルビルド」で約 2 倍（③ 参照）、
+  **cranelift** は codegen 律速の自前構成（lastshot 規模ではまだ来ていない）、**lld** は apple-ld と
+  そもそも差がない（[`COLD-START.md` §③](../lastshot/COLD-START.md)）。今日の構成では一つも効いていない。
+- **規模を増やさない設計（package by feature の葉クレート分割）を守る限り、stable + 素のツールに降りても
+  ビルド速度は落ちない**。nightly を残す理由は今日も「将来の保険」だけ。
+
+**(d) cold 状態では nightly がわずかに優位 (14.6s vs 17.1s)**
+- 自前 90 クレート相当を実 rustc で焼く局面では `-Z threads=8` がコア余りを並列で食って差が出る。
+  「真に cold」の節目で +17% なので、新規 clone / worktree 追加直後の "最初の 1 ビルド" だけ nightly が
+  わずかに気持ちいい。普段のループ（warm）には乗らない差。
+
+### 結論（今日の lastshot で「現状のフルビルドはいくら？」と聞かれたら）
+
+- **warm sccache（普段の体感）= 約 6s** ── dev / release / nightly / stable のどれでも誤差圏。
+- **cold sccache（節目）= 13〜17s** ── 構成と前段で焼いたものに依存。
+- **約 6s と 13〜17s のどちらに当たるかは「sccache キャッシュキーの世代交代があったか」で決まる**、
+  と覚えておけば日々の体感とドキュメント上の数字がズレない。
+- ① の「フルビルド -45% (24s → 13s)」は **sccache を意図的に切って測った数字**（RUSTC_WRAPPER= 無効化）。
+  sccache 有効の warm では旧構成も新構成も差は -10〜20% に縮む（重い deps を sccache が返すと opt-3/opt-0
+  の差自体が支配項でなくなるため）。** ① の改善が無意味になったわけではない**: sccache 無効・新規 clone・
+  CI で焼く時間が短くなる効果は別途残る。
+
 ## 結論
 
 - **大多数のプロジェクト規模では、編集ループは1秒未満**。1秒を超えるのは「起動して動作確認する瞬間(build)」だけで、それも自前5万行(機能90個)級から。
