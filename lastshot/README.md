@@ -137,6 +137,7 @@ DB は dev と同じ native（`./run db-setup` 済み前提）。`./run css-setu
 
 > Rust 変更の反映は再ビルド + プロセス再起動で約1秒（体感の端から端は ~1.2〜1.3s）。
 > cold start の正体・短縮策（codesign / systemfd / リンカ）の実測は [`COLD-START.md`](./COLD-START.md)。
+> 設計とビルドツール両面の高速化施策の総まとめは [`FAST-RUST.md`](./FAST-RUST.md)。
 
 ## CSS（日常はCDN・最終確認だけビルド）
 
