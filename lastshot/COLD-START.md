@@ -26,34 +26,36 @@
 | └ サーバ cold start（exec → `"listening"`） | ~0.285s                    | macOS 初回起動セキュリティ検証（下記）    |
 | └ 残り                                      | ブラウザ側の再接続・再描画 |                                           |
 
-### 参考: フルビルドの実測（3 構成 × sccache cold/warm）
+### 参考: フルビルドの実測（3 構成 × sccache true cold/warm）
 
-`cargo clean` 後の `cargo build [--release] -p app` を 3 構成 × cold/warm で計測（lastshot, 2026-06-15、
-各構成 1 cold + 4 warm = 5 試行、warm は median）。sccache 有効。"stable + 素のツール" =
+`cargo build [--release] -p app` を 3 構成 × true cold/warm で計測（lastshot, 2026-06-15、各構成 1 cold + 4 warm
+= 5 試行、warm は median、**構成ごとに sccache を全消ししてから測定**＝順序効果排除）。"stable + 素のツール" =
 `RUSTUP_TOOLCHAIN=stable RUSTFLAGS=""` で nightly rustflag(`-Z threads`/lld) を無効化 + `strip-nightly.sh` で
 `cargo-features` / `codegen-backend` 行を剥がす（Docker と同条件）:
 
-| 構成                                                                   | cold (sccache miss、節目)  | warm (sccache hit、普段の体感、5 試行 median) |
-| ---------------------------------------------------------------------- | -------------------------- | ------------------------------------------------ |
-| **dev** (nightly + cranelift + `-Z threads=8` + lld + sccache + opt-0) | ~12.5s                     | **~6.66s**                                       |
-| **dev** (stable + `RUSTFLAGS=""` + sccache + opt-0、素のツール)        | 12.8〜17.1s ※              | **~6.59s**                                       |
-| **release** (stable + `RUSTFLAGS=""` + sccache + opt-3)                | ~13.4s                     | **~6.84s**                                       |
-
-※ B (stable dev) cold は順序効果で 12.8〜17.1s に分布する。「真に cold」（前段が nightly のみ、stable+LLVM の
-proc-macro を sccache が持っていない状態）は ~17s、先に他の stable 構成（release 等）を焼いた後だと共有 proc-macro
-が hit して ~12.8s まで圧縮される。日々の体感は warm のほうなので cold の正確な値はそこまで重要ではない。
+| 構成                                                                   | true cold (sccache 空)  | warm (sccache hit、普段の体感、4 試行 median + spread) |
+| ---------------------------------------------------------------------- | ----------------------- | ----------------------------------------------------- |
+| **dev** (nightly + cranelift + `-Z threads=8` + lld + sccache + opt-0) | **~10.6s**              | **~6.05s** (spread 0.55s)                             |
+| **dev** (stable + `RUSTFLAGS=""` + sccache + opt-0、素のツール)        | **~12.8s**              | **~5.77s** (spread 0.22s)                             |
+| **release** (stable + `RUSTFLAGS=""` + sccache + opt-3)                | **~20.1s**              | **~6.30s** (spread 0.16s)                             |
 
 読み方:
-- **warm（普段の体感）はどれも約 6.6〜6.8s で誤差圏（±3%）** ── 重い依存の opt-3 LLVM 仕事を sccache が返すので、
-  自前クレートの仕事しか残らない。**dev opt-0 と release opt-3 が並ぶのも、nightly フル構成と stable + 素のツールが
-  並ぶのも、全部この理由**。`./run release` の体感が dev とほぼ変わらない＝節目で本番相当を気楽に確認できる。
-  細かく見ると dev (A,B) ~6.6s / release (C) ~6.84s で +0.25s だけ release が重いが、これは hot loop の意思決定に
-  影響しないレベル。
-- **cold は 12〜17s** ── 新規 clone / `cargo clean` 直後 / worktree 新規追加 / toolchain 切替直後 / 大きい
-  deps 更新で当たる。cold 状態だけ nightly が `-Z threads=8` の並列フロントで「真に cold」の B 17s に対し A 12.5s
-  ＝ +30% 速い（普段のループには乗らない差）。
+- **warm（普段の体感）= 約 5.8〜6.3s** ── 重い依存の opt-3 LLVM 仕事を sccache が返すので、自前クレートの
+  仕事しか残らない。dev opt-0 (~5.8〜6.0s) と release opt-3 (~6.3s) の差は 0.5s 程度で、hot loop の意思決定に
+  影響しないレベル（**`./run release` の体感が dev とほぼ変わらない**＝節目で本番相当を気楽に確認できる）。
+  dev nightly+full vs dev stable+plain は ±5%（A 6.05 vs B 5.77）で**むしろ stable+plain がわずかに速い**＝
+  ノイズ圏、lastshot 規模では nightly チューニングは warm に乗らない。
+- **true cold（sccache 空）= 10〜20s で構成依存が大きい** ── 新規 clone / sccache パージ / worktree 新規追加 /
+  別 toolchain で初めて焼く / 大きい deps 更新で当たる:
+  - **dev nightly+full** が cold で最速 (~10.6s) ── `-Z threads=8` の並列フロントが dep フルビルドで効く
+    （vs dev stable+plain ~12.8s で **-17%**）。普段のループには乗らない差だが、新規 clone / worktree 初回 /
+    toolchain 切替直後の最初の 1 ビルドだけは気持ちいい。
+  - **release** は cold で重い (~20.1s) ── opt-3 LLVM の本気仕事を sccache が返せない状態だと dev opt-0 の
+    +57%。「sccache 世代交代直後の `./run release`」だけは意外と待つことを覚えておくと事故を避けられる
+    （普段は warm で 6.3s で済む）。
 - **「`cargo clean` 後 = 常に 13〜15s」と読むのは間違い** ── sccache キャッシュキーが世代交代したかで意味が
-  変わる。普段はほぼ warm に収まる。
+  変わる。普段はほぼ warm に収まる。日常で「`cargo clean` 直後」を踏んでも sccache が他作業のエントリを
+  持っていれば実体は cold ではなく半 warm。
 - 詳細な分解（cranelift / -Z threads / lld 個別の効きや sccache warm 同士の差の理由）は
   [`fastweb/BENCHMARK.md` ⑦](../fastweb/BENCHMARK.md)。
 
