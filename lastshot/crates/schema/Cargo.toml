@@ -17,3 +17,8 @@ http-body = "1"
 
 [build-dependencies]
 connectrpc-build = "0.7.0"
+
+# tests/ は別クレートとしてコンパイルされるため、[dependencies] は継承されない。
+# 生成型の proto3 JSON 表現（0値省略 / camelCase）を固定するテストが serde_json を直接使う。
+[dev-dependencies]
+serde_json = { workspace = true }

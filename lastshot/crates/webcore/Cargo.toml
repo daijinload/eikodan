@@ -14,3 +14,12 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 # AppState が共有する Postgres プールの型(PgPool)を持つため。
 db = { path = "../db" }
+
+# tests/ は別クレートとしてコンパイルされるため、[dependencies] は継承されない。
+# レンダリング契約のテストが AppState を組むのに PgPool（接続は張らない connect_lazy）と、
+# view として渡す serde 値に serde_json を使う。tokio は DB のためではなく、
+# PgPool の構築がメンテナンス用タスクを spawn する（＝ランタイム文脈を要求する）ため。
+[dev-dependencies]
+db = { path = "../db" }
+serde_json = { workspace = true }
+tokio = { workspace = true }

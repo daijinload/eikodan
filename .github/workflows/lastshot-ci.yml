@@ -3,8 +3,9 @@
 #
 # 何をするか（ローカルの ./run と同じことを Linux ネイティブで一気通し）。ジョブは2本で、依存関係が
 # 無いので**並列に走る**:
-#   test … build(release) → CSSゲート(Tailwind purge + semgrep) → 起動 → HTTP黒箱(test-http) → ブラウザE2E
-#   lint … ./run lint（rustfmt / clippy / oxfmt / buf / shfmt+shellcheck / sqlfluff）
+#   test … 単体(DB不要) → migrations → build(release)
+#          → CSSゲート(Tailwind purge + semgrep) → 起動 → HTTP黒箱(test-http) → ブラウザE2E
+#   lint … ./run lint（rustfmt / clippy / oxfmt / buf / shfmt+shellcheck / sqlfluff / テスト配置）
 # 分けている理由: lint は DB もアプリ起動も要らず、落ちたときに知りたいことが test と別物だから。
 # 直列に積むと「整形ミス1つで E2E まで待たされる／E2E が落ちると整形の結果が見えない」になる。
 # DB は GitHub の postgres サービス（TCP）。dev機向け最適化（sccache/mold/-Zthreads）は
@@ -92,7 +93,14 @@ jobs:
       # rustup toolchain のキャッシュは実機で逆効果(保存48s ≫ 復元4s、巨大 toolchain が
       # 10GB枠で本命 rust-cache を圧迫)のため入れない。nightly 導入(~7s)は素で実行する。
       - name: Install Rust nightly (rust-toolchain.toml に合わせる)
-        run: rustup toolchain install nightly --component rust-src --profile minimal
+        # cranelift component が要るのは単体テスト（test-unit）が dev プロファイルで
+        # 走るため。Cargo.toml の [profile.dev] と [profile.dev.package."*"] が
+        # codegen-backend = "cranelift" を要求する（release は opt-in していないので不要だった）。
+        # env で LLVM に戻す手もあるが、package."*" 側は環境変数で表現できない
+        # （CARGO_PROFILE_DEV_CODEGEN_BACKEND は [profile.dev] にしか効かない）。
+        # component は 2.4MB で、入れるほうが「CI はローカルの ./run と同じことをする」を保てる。
+        # --component は「カンマ区切りの1引数」。空白区切りにすると2つ目がツールチェイン名として解釈される。
+        run: rustup toolchain install nightly --component rust-src,rustc-codegen-cranelift-preview --profile minimal
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@nextest
@@ -103,6 +111,13 @@ jobs:
           workspaces: |
             lastshot
             lastshot/tests-http
+
+      # DB もアプリ起動も要らないので、「速く落ちるもの」として migrations/build より前に置く。
+      # 配置規約（spec_/unit_ のペア検査）は lint ジョブの ./run lint [7/7] が持つ ── ゲートは
+      # 1か所に寄せる（両ジョブに置くと同じ失敗が2か所で赤くなり、直す場所が分かりにくくなる）。
+      # 規約と命名の詳細は lastshot/docs/testing.md。
+      - name: Unit tests (no DB)
+        run: ./run -q test-unit
 
       - name: Apply migrations (Flyway / docker image = ./run と同じ)
         # postgres は service コンテナ。--network=host で runner の localhost:5432 へ繋ぐ。

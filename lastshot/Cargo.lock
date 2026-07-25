@@ -1486,6 +1486,7 @@ dependencies = [
  "connectrpc-build",
  "http-body",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -2206,6 +2207,7 @@ dependencies = [
  "minijinja-autoreload",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]

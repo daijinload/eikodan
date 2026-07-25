@@ -180,6 +180,18 @@ fmt() { # push前の一括整形(書込/lintの対。dev中はcargo fmt -p <crat
   bash lint/fmt.sh
 }
 
+test-unit() { # クレート単体テスト(DB不要。数秒/常時回してよい)
+  # 現在ワークスペースの単体テストは全てDB不要(docs/testing.md §7)。
+  # 生きたPostgresが要るテストを足すときは _db サフィックスを付け、ここに
+  # -E 'not binary(/_db$/)' を戻して test-db を復活させる ── 逆に「1本も無いのに
+  # filterset を渡す」と nextest は exit 94 で落ちる(実測)ので、素で回す。
+  cargo nextest run --workspace
+}
+
+spec-check() { # 仕様テスト(spec_*.rs/.ts)に仕様書(spec_*.md)が隣にあるか検査
+  bash lint/check-spec-pairs.sh
+}
+
 test-http() { # 起動済みサーバへHTTPブラックボックステスト(別ワークスペース)
   (cd tests-http && cargo nextest run)
 }
@@ -196,7 +208,9 @@ browser() { # ブラウザ駆動テスト(Playwright / 要・起動済みサー�
   (cd browser && npm test)
 }
 
-test() { # まとめてテスト(http +(あれば)browser)
+test() { # まとめてテスト(unit → http +(あれば)browser)
+  once spec-check
+  once test-unit
   once test-http
   [ -d browser ] && once browser || true
 }
