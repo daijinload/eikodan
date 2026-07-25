@@ -16,20 +16,38 @@ PGBIN=/opt/homebrew/opt/postgresql@17/bin
 PG_HOST=/tmp
 
 # --- worktree ごとにポート/DB/composeプロジェクトを自動で分ける ----------------------
-# 同一マシンで dan1〜dan4 を並列起動してもぶつからないよう、worktree のディレクトリ名から
-# スロットを決める(lastshot は常に worktree 直下なので親フォルダ名 = dan2 / eikodan …)。
+# 同一マシンで dan1〜dan4 を並列起動してもぶつからないよう、worktree のディレクトリ名を
+# 分離キーにする(lastshot は常に worktree 直下なので親フォルダ名 = dan2 / eikodan …)。
+#   DB名 / composeプロジェクト名 … worktree 名をそのまま使う(dan2 → lastshot_dan2)。
+#   ポート                        … worktree 名の末尾数字がそのまま下位桁(dan2 → 3002)。
 # DB は 1つのネイティブPostgres を共有(unixソケット・ポート同じ)し、中の database 名だけ分ける。
 #   eikodan(本流) → PORT=3000 / DB=lastshot
 #   dan2          → PORT=3002 / DB=lastshot_dan2
+# 末尾に数字が無い名前(例 feat-search)は「空きポートを自動で取る」ことはせず、エラーで止める。
+# 自動割り当てだと「dan1 は今どのポート?」が起動のたびに変わって分からなくなるので、ポートは
+# 必ず数値で一意に決まる形にする(名前に数字を付けるか PORT= を明示する)。
 # dev も compose も同じ機構で動かす(PORT=待受/公開ポート, PGDATABASE=DB名, プロジェクト名)。
-# 各値は外から渡せば優先(例: PORT=3009 ./run dev)。
-_wt=$(basename "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)")                  # 例: dan2 / eikodan
-_slot=$(printf '%s' "$_wt" | grep -oE '[0-9]+$' || true)                            # 末尾数字 → 1,2,… 無ければ空
-PG_DB=${PG_DB:-lastshot${_slot:+_dan$_slot}}                                        # 無し→lastshot / dan2→lastshot_dan2
-export PGDATABASE="$PG_DB"                                                          # dev: db::connect() が読む / psql・createdb も拾う
-export PORT="${PORT:-$((3000 + 10#${_slot:-0}))}"                                   # dev: main.rs / compose: 公開ポート
-export BASE_URL="${BASE_URL:-http://127.0.0.1:$PORT}"                               # tests-http の接続先
-export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-lastshot${_slot:+_dan$_slot}}" # compose 名衝突回避
+# 各値は外から渡せば優先(例: PORT=3009 ./run dev)。CI は job env で 3000/lastshot に固定する。
+_wt=$(basename "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)") # 例: dan2 / eikodan
+_id=$(printf '%s' "$_wt" | tr -c '[:alnum:]' '_')                  # DB名/コンテナ名に使える形へ(feat-search → feat_search)
+_slot=$(printf '%s' "$_wt" | grep -oE '[0-9]+$' || true)           # 末尾数字 → 1,2,… 無ければ空
+if [ "$_wt" = "${MAIN_WORKTREE:-eikodan}" ]; then
+  _slot=${_slot:-0} # 本流だけは名前に数字を持たないので 0番(3000/lastshot)に固定
+  _name=lastshot
+else
+  _name=lastshot_$_id
+fi
+if [ -z "$_slot" ] && [ -z "${PORT:-}" ]; then
+  echo "worktree 名 '$_wt' の末尾に数字が無いのでポートが決まりません。" >&2
+  echo "  対処1: 数字付きの名前で worktree を切る (例: dan5 → PORT=3005)" >&2
+  echo "  対処2: この場限りなら明示する    (例: PORT=3009 ./run ${1:-dev})" >&2
+  exit 1
+fi
+PG_DB=${PG_DB:-$_name}                                        # 本流→lastshot / dan2→lastshot_dan2
+export PGDATABASE="$PG_DB"                                    # dev: db::connect() が読む / psql・createdb も拾う
+export PORT="${PORT:-$((3000 + 10#$_slot))}"                  # dev: main.rs / compose: 公開ポート
+export BASE_URL="${BASE_URL:-http://127.0.0.1:$PORT}"         # tests-http の接続先
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-$_name}" # compose 名衝突回避
 
 # migrations は Flyway で管理する。CLI/JRE はローカルに入れず docker image で実行する
 # （compose / CI と同じ版）。tag は docker hub の最新メジャーに追従。
@@ -193,12 +211,18 @@ down() { # compose を即停止(SIGKILL / 使い捨て前提)
 
 # --- CI(.github/workflows/lastshot-ci.yml)をローカルで一気通しする ------------------
 # CI と同じ TCP postgres・release バイナリ・test-http→browser の流れを手元で再現する。
-# postgres は「使い捨てコンテナ」を worktree ごとのポートで立てる(5432+slot ＝ dan1〜dan4 並列OK・
-# ネイティブPGの 5432 とも衝突しない)。compose の postgres には公開ポートが無い(同一網前提・
+# postgres は「使い捨てコンテナ」を worktree ごとのポートで立てる(app ポートと同じ幅だけ 5432 から
+# ずらす ＝ dan1→5433 / dan2→5434。dan1〜dan4 並列OK・ネイティブPGの 5432 とも衝突しない)。
+# PORT を明示した場合もそれに追随する。compose の postgres には公開ポートが無い(同一網前提・
 # worktree 並列のため不変にしている)ので、ここは docker run で host に publish する。
-# 破棄は docker rm -f(即SIGKILL ＝ down -t 0 と同じ作法)。
-CI_PG_NAME="lastshot-ci-pg${_slot:-0}"
-CI_PGPORT="${CI_PGPORT:-$((5432 + 10#${_slot:-0}))}"
+# コンテナ名・ログは worktree 名で分ける(数字だけだと PORT 明示時に衝突するため)。
+# 破棄は docker rm -f / kill -9(即SIGKILL ＝ down -t 0 と同じ作法)。
+# アプリの停止は PID ファイルでなく「$PORT を LISTEN しているプロセスを落とす」で行う。
+# ポートは worktree 名から一意に決まるので PID を覚えておく必要が無く、前回 trap が効かずに
+# 残った野良プロセスもまとめて掃除できる(PID ファイルだと残骸を取りこぼす)。
+CI_PG_NAME="lastshot-ci-pg-$_id"
+CI_PGPORT="${CI_PGPORT:-$((5432 + PORT - 3000))}"
+CI_APP_LOG="/tmp/lastshot-ci-app-$_id.log"
 
 build-release() { # release ビルド(CIと同じ cargo build --release -p app)
   cargo build --release -p app
@@ -231,10 +255,12 @@ ci-migrate() { # 使い捨てpgへ Flyway で migrations を適用(CIと同じ d
     db-migrate
 }
 
-ci-app-start() { # release バイナリを TCP 接続で起動(ログ/PIDは worktree ごと)
+ci-app-start() { # release バイナリを TCP 接続で起動(ログは worktree ごと)
+  # 先に $PORT を空ける。塞がったまま起動すると bind に失敗して即死する一方、ci-app-wait の
+  # curl は「先に居たプロセス」に通ってしまい、別サーバ相手にテストが緑になる(例: ./run dev)。
+  ci-app-stop
   HOST=127.0.0.1 PORT="$PORT" nohup ./target/release/app \
-    >"/tmp/lastshot-ci-app-${_slot:-0}.log" 2>&1 &
-  echo $! >"/tmp/lastshot-ci-app-${_slot:-0}.pid"
+    >"$CI_APP_LOG" 2>&1 &
 }
 
 ci-app-wait() { # アプリの起動を待つ(BASE_URL に疎通するまで最大60s)
@@ -246,14 +272,17 @@ ci-app-wait() { # アプリの起動を待つ(BASE_URL に疎通するまで最�
     sleep 1
   done
   echo "app が起動しませんでした:"
-  cat "/tmp/lastshot-ci-app-${_slot:-0}.log"
+  cat "$CI_APP_LOG"
   return 1
 }
 
-ci-app-stop() { # ci-app-start で起動したアプリを停止
-  local pf="/tmp/lastshot-ci-app-${_slot:-0}.pid"
-  [ -f "$pf" ] && kill "$(cat "$pf")" 2>/dev/null || true
-  rm -f "$pf"
+ci-app-stop() { # $PORT を LISTEN しているプロセスを落とす(即SIGKILL / 残骸ごと掃除)
+  local pids
+  pids=$(lsof -ti "tcp:$PORT" -sTCP:LISTEN 2>/dev/null || true)
+  [ -z "$pids" ] && return 0
+  # 複数 PID を個別の引数として渡したいので意図的に非クォート。
+  # shellcheck disable=SC2086
+  kill -9 $pids 2>/dev/null || true
 }
 
 ci() { # CIをローカルで一気通し(build→CSSゲート→TCP pg→起動→test-http→browser)

@@ -172,6 +172,9 @@ jobs:
       # test ジョブと同じく dev機向け最適化を無効化（素ビルド）。
       RUSTFLAGS: ""
       CARGO_BUILD_RUSTC_WRAPPER: ""
+      # ./run は worktree 名の末尾数字からポートを決め、無ければ fail-fast する。チェックアウト先の
+      # ディレクトリ名（= リポジトリ名）に依存しないよう、test ジョブと同じく本流相当に固定する。
+      PORT: "3000"
     steps:
       - uses: actions/checkout@v4
 
