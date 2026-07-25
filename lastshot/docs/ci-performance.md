@@ -24,6 +24,7 @@ CI の高速化方針」にもあるが、本書は**測り方・実数・なぜ
 | pipx venv cache           | 入れない                                                                 | warm でも当たらない                                                      | **却下**                                                               |
 | rustup toolchain cache    | 入れない                                                                 | 復元 ~4s 得 ＜ **保存 Post 48s**。巨大で rust-cache の 10GB 枠を圧迫     | **却下（逆効果）**                                                     |
 | apt パッケージ cache      | 入れない                                                                 | payload 小で restore 相殺                                                | **却下**                                                               |
+| fmt/lint ゲート           | **`lint` ジョブを新設し `test` と並列**                                  | lint 33s（warm）vs test 93s ＝ **CI 総時間の増加 0s**                    | **採用**（§9）                                                         |
 
 ---
 
@@ -118,6 +119,32 @@ CI の高速化方針」にもあるが、本書は**測り方・実数・なぜ
 - **判断**: **採用**。キー `playwright-<arch>-hash(package-lock.json)` は playwright 更新で自動失効。
 - 設定: `.github/workflows/lastshot-ci.yml` の Browser E2E 直前に `actions/cache@v4`
   （`~/.cache/ms-playwright` + `lastshot/browser/node_modules`）。
+
+### 9. fmt/lint ゲートを `test` と並列の `lint` ジョブで足す
+
+- **背景**: `./run lint` は手元で手動で回すだけで CI に無く、**main の lint が赤いまま気付かれずに残っていた**。
+  取りこぼしの網として CI に入れたいが、既に 93s ある `test` の後ろに積むと総時間が伸びる。
+- **措置**: `needs` を張らない独立ジョブ `lint` にして**並列**で走らせる。
+- **実測**（このジョブのステップ分解。cold = キャッシュ未作成の初回 / warm = rust-cache 復元あり）:
+
+  | ステップ                      | cold    | warm    |
+  | ----------------------------- | ------- | ------- |
+  | protoc（apt）                 | 10s     | 8s      |
+  | nightly toolchain             | 7s      | 7s      |
+  | rust-cache 復元               | 0s      | 2s      |
+  | buf/shfmt/shellcheck/sqlfluff | 4s      | 2s      |
+  | oxfmt（`./run lint-setup`）   | 4s      | 3s      |
+  | **`./run lint` 本体**         | **26s** | **5s**  |
+  | ジョブ総時間                  | **62s** | **33s** |
+
+- **CI 総時間の増加は 0s**。`test` が 93s なので lint（33s）は完全に裏に隠れる。
+  並列なので総時間 = max(test, lint) = test のまま。
+- **`./run lint` 本体は warm で 5s**。cold の 26s はほぼ clippy のビルドで、rust-cache が効けば消える。
+  そのため lint 側は `shared-key: lint` で **test とは別のキャッシュ**にしている（別ランナー＝別 `target/`。
+  混ぜると release を焼いた test 側と dev 全ターゲットを焼いた lint 側が互いを上書きし合う）。
+- **残っているコストは toolchain とツール導入（合計 ~20s）** で、`./run lint` 本体より大きい。
+  ただし rustup toolchain のキャッシュは §6 のとおり逆効果なので手を出さない。
+- **判断**: **採用**。総時間ゼロコストで「手元で lint を回し忘れても main に入らない」が手に入る。
 
 ---
 
