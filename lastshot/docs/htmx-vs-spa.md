@@ -28,13 +28,13 @@ ref: https://developer.chrome.com/blog/paint-holding
 公式が「HTMLを返せるサーバなら何でもOK」と明記。
 ref: https://htmx.org/docs/
 
-| バックエンド | 1リクエストの典型応答時間 | 白フラッシュ消える？ |
-|---|---|---|
-| Rust (Axum) / Go | 〜1ms | 余裕で消える |
-| Node (Fastify) | 3〜10ms | 消える |
-| Node (Express) | 5〜15ms | だいたい消える |
-| Python (FastAPI) | 5〜20ms | ギリギリ |
-| Python (Django) / Ruby (Rails) / PHP (Laravel) | 30〜500ms | 見える |
+| バックエンド                                   | 1リクエストの典型応答時間 | 白フラッシュ消える？ |
+| ---------------------------------------------- | ------------------------- | -------------------- |
+| Rust (Axum) / Go                               | 〜1ms                     | 余裕で消える         |
+| Node (Fastify)                                 | 3〜10ms                   | 消える               |
+| Node (Express)                                 | 5〜15ms                   | だいたい消える       |
+| Python (FastAPI)                               | 5〜20ms                   | ギリギリ             |
+| Python (Django) / Ruby (Rails) / PHP (Laravel) | 30〜500ms                 | 見える               |
 
 ベンチ数値は TechEmpower 等の桁感、実装次第で変動。
 
@@ -61,12 +61,12 @@ HTMX は「サーバ側でJOINして HTML で返す」1往復モデルなので�
 
 ## 4. SPA 4大対処策は「複雑さの削減」ではなく「移動」
 
-| 対処 | 削った複雑さ | 増えた複雑さ |
-|---|---|---|
-| GraphQL | フロントの複数fetch | スキーマ / resolver / DataLoader / N+1対策 / キャッシュ無効化 / コード生成 |
-| BFF | フロントの集約ロジック | 中間サーバ / デプロイ単位増 / 認証伝播 / バージョニング |
-| RSC | 一部のJSON往復 | Server/Client境界 / "use server"の使い分け / ハイドレーション不整合 |
-| tRPC + batching | 型のズレ | TypeScript必須 / サーバ・クライアント密結合 / FW選定固定化 |
+| 対処            | 削った複雑さ           | 増えた複雑さ                                                               |
+| --------------- | ---------------------- | -------------------------------------------------------------------------- |
+| GraphQL         | フロントの複数fetch    | スキーマ / resolver / DataLoader / N+1対策 / キャッシュ無効化 / コード生成 |
+| BFF             | フロントの集約ロジック | 中間サーバ / デプロイ単位増 / 認証伝播 / バージョニング                    |
+| RSC             | 一部のJSON往復         | Server/Client境界 / "use server"の使い分け / ハイドレーション不整合        |
+| tRPC + batching | 型のズレ               | TypeScript必須 / サーバ・クライアント密結合 / FW選定固定化                 |
 
 **減算ではなく置換**。HTMX だけが層そのものを抜いている。
 
@@ -86,13 +86,13 @@ HTMX は「サーバ側でJOINして HTML で返す」1往復モデルなので�
 
 SPA推進派のレッテル。実態は2010年代後半の現代ブラウザ機能の組み合わせ：
 
-| 機能 | 使っているもの | 登場 |
-|---|---|---|
-| 非同期通信 | `fetch` API | 2015〜 |
-| URL書き換え | `history.pushState` | 2010〜 |
-| DOM差分挿入 | `MutationObserver` + `Range.createContextualFragment` | 2014〜 |
-| イベント拡張 | カスタムイベント / `hx-trigger` | 2010年代 |
-| プッシュ | SSE / WebSocket拡張 | 2010〜 |
+| 機能         | 使っているもの                                        | 登場     |
+| ------------ | ----------------------------------------------------- | -------- |
+| 非同期通信   | `fetch` API                                           | 2015〜   |
+| URL書き換え  | `history.pushState`                                   | 2010〜   |
+| DOM差分挿入  | `MutationObserver` + `Range.createContextualFragment` | 2014〜   |
+| イベント拡張 | カスタムイベント / `hx-trigger`                       | 2010年代 |
+| プッシュ     | SSE / WebSocket拡張                                   | 2010〜   |
 
 **SPAの便利さをHTMLの読みやすさを捨てずに取り戻す**＝後退ではなく別ルートでの前進。
 
@@ -110,10 +110,10 @@ SPA推進派のレッテル。実態は2010年代後半の現代ブラウザ機�
 
 「Rust = ビルド遅い = フロント反復に向かない」は今回の構成では当てはまらない：
 
-| 変更箇所 | 反映方法 | 体感速度 |
-|---|---|---|
-| HTML/CSS (templates/) | minijinja-autoreload + tower-livereload | 即時（Rustビルドゼロ） |
-| Rustロジック | 増分ビルド + プロセス再起動 | 約1秒（端から端で ~1.2〜1.3s） |
+| 変更箇所              | 反映方法                                | 体感速度                       |
+| --------------------- | --------------------------------------- | ------------------------------ |
+| HTML/CSS (templates/) | minijinja-autoreload + tower-livereload | 即時（Rustビルドゼロ）         |
+| Rustロジック          | 増分ビルド + プロセス再起動             | 約1秒（端から端で ~1.2〜1.3s） |
 
 画面いじりの9割はテンプレ編集 → Rustに触らない。
 「Rustが遅い」ではなく「**Rust部分を触る回数自体が少ない設計**」になっている。
@@ -138,14 +138,14 @@ SPA推進派のレッテル。実態は2010年代後半の現代ブラウザ機�
 
 React/Vue/Angular は**強制ではなく流行**。
 
-| ライブラリ | サイズ | 用途 |
-|---|---|---|
-| React + ReactDOM | 45KB | フルSPA |
-| Alpine.js | 15KB | **HTMXとの定番ペア** |
-| Stimulus | 10KB | Hotwire/Rails公式 |
-| Lit | 5KB | Web Components |
-| Solid.js | 7KB | reactive、Reactより速い |
-| Svelte | 2KB | コンパイル時解決 |
+| ライブラリ       | サイズ | 用途                    |
+| ---------------- | ------ | ----------------------- |
+| React + ReactDOM | 45KB   | フルSPA                 |
+| Alpine.js        | 15KB   | **HTMXとの定番ペア**    |
+| Stimulus         | 10KB   | Hotwire/Rails公式       |
+| Lit              | 5KB    | Web Components          |
+| Solid.js         | 7KB    | reactive、Reactより速い |
+| Svelte           | 2KB    | コンパイル時解決        |
 
 **HTMX + Alpine（合計30KB）** で「Reactで作る軽いUI」と同等以上のことができる：
 
@@ -186,13 +186,13 @@ React/Vue/Angular は**強制ではなく流行**。
 
 DevToolsの「Disable cache」はHTTPキャッシュだけを切るもので、それ以外の最適化は生きている：
 
-| 層 | キャッシュOFFで残るか | 効果 |
-|---|---|---|
-| HTTPキャッシュ（ディスク/メモリ） | × 切れる | リソース再ダウンロードが必要 |
-| DNSキャッシュ（OS/ブラウザ） | ◯ 残る | IP引きが0ms |
-| TLSセッション再開 | ◯ 残る | ハンドシェイクが1RTT短縮 |
-| HTTP/2コネクション再利用 | ◯ 残る | TCP+TLS確立コストゼロ |
-| Preload Scanner（投機的取得） | ◯ 関係なし | HTMLパース中に `<link>`/`<script>` を見つけ次第fetch開始 |
+| 層                                | キャッシュOFFで残るか | 効果                                                     |
+| --------------------------------- | --------------------- | -------------------------------------------------------- |
+| HTTPキャッシュ（ディスク/メモリ） | × 切れる              | リソース再ダウンロードが必要                             |
+| DNSキャッシュ（OS/ブラウザ）      | ◯ 残る                | IP引きが0ms                                              |
+| TLSセッション再開                 | ◯ 残る                | ハンドシェイクが1RTT短縮                                 |
+| HTTP/2コネクション再利用          | ◯ 残る                | TCP+TLS確立コストゼロ                                    |
+| Preload Scanner（投機的取得）     | ◯ 関係なし            | HTMLパース中に `<link>`/`<script>` を見つけ次第fetch開始 |
 
 つまり「ダウンロードバイト数」だけリセットされて、**接続コストはすでに払い済み**。これが7msの正体。
 
@@ -200,12 +200,14 @@ DevToolsの「Disable cache」はHTTPキャッシュだけを切るもので、�
 
 普通のパーサ：HTML読む → `<script>` 見つけた → fetch → 待つ → 続き読む
 現代ブラウザ：
+
 ```
 [メインパーサ]   <html>...<head>...
 [Preload Scanner] 先読みで <link rel=stylesheet> 発見 → 即fetch開始
                   並列で <script src=...> 発見 → 即fetch開始
 [メインパーサ]   ...DOMtreeを組み立てつつ受信完了を待つ
 ```
+
 Chrome 2008年、Safari 2010年代から標準動作。
 
 ### 含意
@@ -246,16 +248,16 @@ webpack/vite/babel/postcss/eslint/prettier/tsconfig/jest/playwright/storybook...
 
 ### React+Next.js で同等品を作ると典型的に発生するもの
 
-| 種別 | 何が必要か |
-|---|---|
-| 設定ファイル | `next.config.js` / `tsconfig.json` / `.eslintrc` / `.prettierrc` / `postcss.config.js` / `tailwind.config.js` / `next-env.d.ts` |
-| 依存パッケージ | `package.json` に50〜100個、`node_modules` 数百MB |
-| ビルドツール | webpack/vite/turbopackの選定と設定 |
-| 状態管理 | Zustand / Redux / Jotai のいずれかとそのboilerplate |
-| データ取得 | TanStack Query / SWR のセットアップ |
-| 型生成 | OpenAPI/GraphQL からの型自動生成パイプライン |
-| フォーム | react-hook-form / zod のセットアップ |
-| テスト | jest / vitest / playwright / msw のセットアップ |
+| 種別           | 何が必要か                                                                                                                      |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| 設定ファイル   | `next.config.js` / `tsconfig.json` / `.eslintrc` / `.prettierrc` / `postcss.config.js` / `tailwind.config.js` / `next-env.d.ts` |
+| 依存パッケージ | `package.json` に50〜100個、`node_modules` 数百MB                                                                               |
+| ビルドツール   | webpack/vite/turbopackの選定と設定                                                                                              |
+| 状態管理       | Zustand / Redux / Jotai のいずれかとそのboilerplate                                                                             |
+| データ取得     | TanStack Query / SWR のセットアップ                                                                                             |
+| 型生成         | OpenAPI/GraphQL からの型自動生成パイプライン                                                                                    |
+| フォーム       | react-hook-form / zod のセットアップ                                                                                            |
+| テスト         | jest / vitest / playwright / msw のセットアップ                                                                                 |
 
 これらの**ほとんどが「本質的なTODO機能」ではなく「フレームワークと共存するための儀式」**で、コードレビューでも実装本体より設定の議論に時間が取られがち。
 

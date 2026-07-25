@@ -8,12 +8,13 @@
 lastshot の「保存したら勝手に反映」は、**2つの独立した監視**の合わせ技で成り立つ。
 両者は別プロセス／別タスクで動き、互いを直接知らない。**ファイルの書き込みを介して間接的に連携**する。
 
-| # | 監視役 | 何を監視 | 何をする | いつ |
-|---|---|---|---|---|
-| ① | **Tailwind CLI `--watch`**（別プロセス） | `assets/input.css` と `@source` のテンプレHTML | `crates/app/static/app.css` を作り直す | builtモードのみ |
-| ② | **notify + tower-livereload**（app内のtokioタスク） | `template_dirs()`（+ builtでは `crates/app/static/`） | 変更を拾って**ブラウザを丸ごと再読込** | 常時 |
+| #   | 監視役                                              | 何を監視                                              | 何をする                               | いつ            |
+| --- | --------------------------------------------------- | ----------------------------------------------------- | -------------------------------------- | --------------- |
+| ①   | **Tailwind CLI `--watch`**（別プロセス）            | `assets/input.css` と `@source` のテンプレHTML        | `crates/app/static/app.css` を作り直す | builtモードのみ |
+| ②   | **notify + tower-livereload**（app内のtokioタスク） | `template_dirs()`（+ builtでは `crates/app/static/`） | 変更を拾って**ブラウザを丸ごと再読込** | 常時            |
 
 加えてサーバ側には:
+
 - **minijinja-autoreload**（`crates/webcore/src/lib.rs`）: リクエストのたびにテンプレの変更を見て差分再読込（**再コンパイル不要**）。
 - **CSS配信ハンドラ**（`crates/app/src/main.rs` の `app_css`）: リクエストのたびに `app.css` を**ディスク直読み**（サーバ側キャッシュなし＝常に最新）。
 
@@ -36,28 +37,35 @@ fsイベントが複数飛べば `reload()` も複数回呼ばれる（→ 後�
 ## 変更の種類別フロー
 
 ### A. テンプレHTMLのテキスト/HTMX属性だけ変えた
+
 ```
 保存 → notify(template_dirs) → reload()
      → ブラウザ location.reload()
      → リクエスト時に minijinja-autoreload が変更を検知して再読込（再コンパイルなし）
 ```
+
 CSSの生成物は変わらないので ① は実質ノータッチ。1回の reload で確定。
 
 ### B. テンプレに Tailwind クラスを新規追加した
+
 - **日常（CDN）**: ② が reload → ブラウザJITが新クラスを即生成。**1回の reload で確定**、待ち時間なし。
 - **builtモード（`CSS=built`）**: 下のように reload が2回走り得る（最終確認時のみ意識すればよい）:
+
 ```
 保存 ─┬→ ② notify(template) → reload #1 → 再読込
       │        （この時点では app.css 未再生成 → 新クラスが一瞬当たらない）
       └→ ① Tailwind が @source で検知 → 数十ms後 app.css 再生成
                 → ② notify(static) → reload #2 → 再読込（新CSS反映で確定）
 ```
+
 順序上、1回目は無スタイルの一瞬→2回目で正。テキストだけ・既存クラスの変更なら出力が変わらず2回目は起きない。
 
 ### C. `assets/input.css`（テーマ等）を変えた
+
 `input.css` は notify の監視外。① が検知 → `app.css` 再生成 → `static/` の変更で ② が reload。きれいに1経路。
 
 ### D. Rustハンドラ/ロジックを変えた
+
 このループの**外**。再コンパイルが必要（`bacon run` / `bacon serve` がサーバ再起動）。
 再起動で long-poll が切れ、tower-livereload が復帰時に reload する。
 
@@ -83,13 +91,13 @@ release ビルドも必ずCLIクリーン生成を通るので、最終成果物
 
 日常CSSはCDN配信なので下記の「サーバ側CSS / ブラウザ側CSS」は**builtモードのときだけ**の話。テンプレ層は常時。
 
-| 層 | 挙動 | stale risk |
-|---|---|---|
-| **サーバ側テンプレ** | minijinja-autoreload が毎リクエストで変更チェック→差分再読込（`set_fast_reload(true)`） | なし |
-| **サーバ側CSS**（built） | `app_css` が毎リクエスト `tokio::fs::read` でディスク直読み（サーバ側キャッシュゼロ） | なし |
+| 層                         | 挙動                                                                                        | stale risk             |
+| -------------------------- | ------------------------------------------------------------------------------------------- | ---------------------- |
+| **サーバ側テンプレ**       | minijinja-autoreload が毎リクエストで変更チェック→差分再読込（`set_fast_reload(true)`）     | なし                   |
+| **サーバ側CSS**（built）   | `app_css` が毎リクエスト `tokio::fs::read` でディスク直読み（サーバ側キャッシュゼロ）       | なし                   |
 | **ブラウザ側CSS**（built） | `app.css` に **debugビルド時のみ `Cache-Control: no-cache`** を付与 → reload で必ず取り直す | なし（下記で解消済み） |
 
-- **sccache / incremental はこの経路に一切絡まない。** あれは Rust *コンパイル* のキャッシュで、
+- **sccache / incremental はこの経路に一切絡まない。** あれは Rust _コンパイル_ のキャッシュで、
   CSS・テンプレ変更ではコンパイル自体が走らない。効くのは D（Rust変更）のときだけ。
 - **`Cache-Control: no-cache` を入れた理由**: 付けないと `app.css` は validator も無く、ブラウザが
   鮮度を確定できず挙動がブラウザ/プロキシ依存になる。debug時に `no-cache` を明示し、reload のたびに
@@ -99,6 +107,7 @@ release ビルドも必ずCLIクリーン生成を通るので、最終成果物
 ---
 
 ## まとめ（最短経路）
+
 - **日常（CDN）** … テンプレ/HTMX保存 → ② がブラウザを reload。CSSはブラウザJITが即生成。Rustビルドゼロ・1プロセス。
 - **最終確認（built）** … `CSS=built` で起動。① がCSSを作り直し、② がブラウザを reload。push前は `check-css.sh` で確定検査。
 - **Rust** … この機構の外。再コンパイル＋サーバ再起動 → reload。

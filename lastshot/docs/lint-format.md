@@ -9,14 +9,14 @@ lastshot での**実際の配線**は [`../lint/README.md`](../lint/README.md)�
 
 ## 何に何を当てるか（結論）
 
-| 対象 | Formatter | Linter | 取得 |
-|---|---|---|---|
-| Rust | **rustfmt** | **clippy** | toolchain 同梱 |
-| TOML/YAML/MD/CSS | **oxfmt** | — | node（`.lint-tools` にローカル固定） |
-| HTML/Jinja | **oxfmt**（Tailwind 整列） | （描画テストで担保） | 同上 |
-| proto | **buf format** | **buf lint** | brew（単一バイナリ） |
-| shell | **shfmt** | **shellcheck** | brew（単一バイナリ） |
-| SQL | **sqlfluff** | **sqlfluff** | brew（Python・依存ごと配布） |
+| 対象             | Formatter                  | Linter               | 取得                                 |
+| ---------------- | -------------------------- | -------------------- | ------------------------------------ |
+| Rust             | **rustfmt**                | **clippy**           | toolchain 同梱                       |
+| TOML/YAML/MD/CSS | **oxfmt**                  | —                    | node（`.lint-tools` にローカル固定） |
+| HTML/Jinja       | **oxfmt**（Tailwind 整列） | （描画テストで担保） | 同上                                 |
+| proto            | **buf format**             | **buf lint**         | brew（単一バイナリ）                 |
+| shell            | **shfmt**                  | **shellcheck**       | brew（単一バイナリ）                 |
+| SQL              | **sqlfluff**               | **sqlfluff**         | brew（Python・依存ごと配布）         |
 
 ## 判断とその理由
 
@@ -33,6 +33,21 @@ lastshot での**実際の配線**は [`../lint/README.md`](../lint/README.md)�
 - **SQL は sqlfluff（format + lint 兼用）。** oxfmt は SQL 非対応なので別建て。`sqlfluff lint` は整形逸脱も
   lint ルールとして検出するので、**ゲートは lint 1本で「整形済み かつ ルール準拠」を確認できる**（書き込みは `sqlfluff fix`）。
   方言は **postgres** 固定。Python 製だが brew が依存ごと配布する。
+
+### md テーブルの整列は diff を太らせる（承知の上で採る）
+
+oxfmt（Prettier 互換）は markdown のテーブルを**列の最大幅にパディングして整列**する。無効化オプションは無い。
+`docs/README.md`（10 行の表）で実測すると:
+
+| 編集の種類                    | 再整形後の diff 行数 |
+| ----------------------------- | -------------------- |
+| セル 1 個を**短く**書き換え   | 2 行（その行だけ）   |
+| **既存より長い行**を 1 行追加 | **21 行（表全体）**  |
+
+列幅が変わらない編集はその行しか動かない。**列幅を変える編集をしたときだけ表全体が diff に出る**。
+「1 行足したのに表全体が赤緑になる」ので、レビューでは**表の追加行だけを見れば足りる**（残りはパディング）。
+これを嫌って md を oxfmt の対象外にする手もあるが、そうすると**表の桁が揃わない状態が放置される**ので
+整列を採っている。
 
 ## ツール標準ルールを外している箇所（設計側を正とする）
 

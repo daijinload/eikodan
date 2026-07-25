@@ -44,12 +44,12 @@ rust-analyzer 等）が効かなくなり、各所で `--config パス` を手�
 
 ## lastshot での手本
 
-| 例 | やっていること |
-|----|----------------|
-| `browser/` | ブラウザE2Eを1フォルダに自己完結（`playwright.config.ts` と `package.json` がそのフォルダのルート＝ツールはここから起動）→ 理想形。`tests-http/` も同じ形 |
-| `assets/` | CSS/Tailwind の“実装”（`input.css` / `setup-css.sh` / `check-css.sh` / `semgrep/`）を1フォルダに集約 |
-| `lint/` | fmt/lint の配線と設定（`.oxfmtrc.json` / `.sqlfluff` / スクリプト）を1フォルダに集約。ただし `rustfmt.toml` だけは**自動探索アンカー**なのでプロジェクトルート直下に残す |
-| `migrations/` + `flyway.toml` | 中身（SQL）はフォルダ、`locations` を指す設定はルート（Flyway をルートから起動するため） |
+| 例                            | やっていること                                                                                                                                                           |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `browser/`                    | ブラウザE2Eを1フォルダに自己完結（`playwright.config.ts` と `package.json` がそのフォルダのルート＝ツールはここから起動）→ 理想形。`tests-http/` も同じ形                |
+| `assets/`                     | CSS/Tailwind の“実装”（`input.css` / `setup-css.sh` / `check-css.sh` / `semgrep/`）を1フォルダに集約                                                                     |
+| `lint/`                       | fmt/lint の配線と設定（`.oxfmtrc.json` / `.sqlfluff` / スクリプト）を1フォルダに集約。ただし `rustfmt.toml` だけは**自動探索アンカー**なのでプロジェクトルート直下に残す |
+| `migrations/` + `flyway.toml` | 中身（SQL）はフォルダ、`locations` を指す設定はルート（Flyway をルートから起動するため）                                                                                 |
 
 `rustfmt.toml` がルート直下にあるのは規則の例外ではなく、**ルール1（自動探索アンカーはツールが動く場所に置く）
 の適用結果**。`cargo fmt` はワークスペースルートから探すので、ここを動かすとエディタの保存時整形が効かなくなる。

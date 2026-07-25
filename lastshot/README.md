@@ -12,15 +12,15 @@
 
 ## 何を統合したか（各サブプロジェクトの結論を集約）
 
-| 要素                                                                                                                                                       | 出自                                 | lastshot での形                         |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | --------------------------------------- |
-| ノービルドUI（axum + HTMX + MiniJinja + daisyUI）+ ホットリロード + package-by-feature + ビルド最適化（nightly/lld/-Zthreads/Cranelift/dev=opt0/sccache） | fastweb（実験場）               | 土台                                    |
-| スキーマファースト（`.proto` 単一真実 → 1つの生成型で HTML描画 / `<!-- view-data -->` 埋め込み / Connect API を同源駆動）                                  | connectweb（実験場）         | 土台                                    |
-| Postgres 永続化（unix ソケット最速 / `query!` マクロ不使用でビルド速度維持）                                                                               | pg-bench（実験場）             | `crates/db` + service 層                |
-| サンプル題材（カウンター）                                                                                                                                 | subsecond-demo（実験場） | `crates/feature-counter`（HTMX + DB化） |
-| CSS最終確認ゲート（Tailwind CLI フルパージ + semgrep）                                                                                                     | fastweb `assets/`                    | `assets/`                               |
-| タスクランナー（bash 関数ディスパッチャ）                                                                                                                  | task-runners（実験場）     | `./run`                                 |
-| 開発環境（macOS bash 5.x）                                                                                                                                 | [docs/bash-setup.md](./docs/bash-setup.md)    | 下記セットアップから参照                |
+| 要素                                                                                                                                                      | 出自                                       | lastshot での形                         |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ | --------------------------------------- |
+| ノービルドUI（axum + HTMX + MiniJinja + daisyUI）+ ホットリロード + package-by-feature + ビルド最適化（nightly/lld/-Zthreads/Cranelift/dev=opt0/sccache） | fastweb（実験場）                          | 土台                                    |
+| スキーマファースト（`.proto` 単一真実 → 1つの生成型で HTML描画 / `<!-- view-data -->` 埋め込み / Connect API を同源駆動）                                 | connectweb（実験場）                       | 土台                                    |
+| Postgres 永続化（unix ソケット最速 / `query!` マクロ不使用でビルド速度維持）                                                                              | pg-bench（実験場）                         | `crates/db` + service 層                |
+| サンプル題材（カウンター）                                                                                                                                | subsecond-demo（実験場）                   | `crates/feature-counter`（HTMX + DB化） |
+| CSS最終確認ゲート（Tailwind CLI フルパージ + semgrep）                                                                                                    | fastweb `assets/`                          | `assets/`                               |
+| タスクランナー（bash 関数ディスパッチャ）                                                                                                                 | task-runners（実験場）                     | `./run`                                 |
+| 開発環境（macOS bash 5.x）                                                                                                                                | [docs/bash-setup.md](./docs/bash-setup.md) | 下記セットアップから参照                |
 
 > 除外: **subsecond ホットパッチ**（axum 素組には非対応＝Dioxus 移行が要る。判断の記録は
 > [`docs/decisions/0001-subsecond-hotpatch.md`](./docs/decisions/0001-subsecond-hotpatch.md)）。
@@ -131,12 +131,12 @@ migrations/V20260614153500__seed_counter.sql    # 初期行 id=1, value=0
 
 ### 4つのモード（CSS × ツールチェイン × プロファイル）
 
-| モード | コマンド | CSS | ツールチェイン/プロファイル | 用途 |
-|---|---|---|---|---|
-| 高速開発 | `./run dev` | CDN（ブラウザJIT・ビルドゼロ） | nightly / debug | 日常の作業（7〜8割） |
-| CSSビルド開発 | `CSS=built ./run dev` | CLI生成 `/static/app.css` | nightly / debug | 本番CSSの最終目視（往復で再ビルドしない） |
-| **リリース** | `./run release` | CLI生成（minify・release は常にこちら） | **stable / release**（Rust既定 opt-3 のみ） | 本番に出すのと同じ build をローカルで実行 |
-| デプロイ相当 | `./run release-max` | 同上 | **stable / release-max**（opt-3 + LTO=fat + cgu=1） | 最大最適化での動作確認・比較（ビルドは約3.2倍かかる） |
+| モード        | コマンド              | CSS                                     | ツールチェイン/プロファイル                         | 用途                                                  |
+| ------------- | --------------------- | --------------------------------------- | --------------------------------------------------- | ----------------------------------------------------- |
+| 高速開発      | `./run dev`           | CDN（ブラウザJIT・ビルドゼロ）          | nightly / debug                                     | 日常の作業（7〜8割）                                  |
+| CSSビルド開発 | `CSS=built ./run dev` | CLI生成 `/static/app.css`               | nightly / debug                                     | 本番CSSの最終目視（往復で再ビルドしない）             |
+| **リリース**  | `./run release`       | CLI生成（minify・release は常にこちら） | **stable / release**（Rust既定 opt-3 のみ）         | 本番に出すのと同じ build をローカルで実行             |
+| デプロイ相当  | `./run release-max`   | 同上                                    | **stable / release-max**（opt-3 + LTO=fat + cgu=1） | 最大最適化での動作確認・比較（ビルドは約3.2倍かかる） |
 
 `./run release` / `./run release-max` は **dev=nightly のまま本番だけ stable** にするための入口（Docker と同じ仕組み）:
 `assets/tailwindcss` で本番CSSを minify 生成 → `assets/strip-nightly.sh` で Cargo.toml の nightly 専用行を

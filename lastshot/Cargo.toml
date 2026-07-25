@@ -74,5 +74,5 @@ codegen-backend = "cranelift" # 依存も Cranelift で統一（実測で wall �
 # ───────────────────────────────────────────────────────────
 [profile.release-max]
 inherits = "release"
-lto = "fat"           # クレート跨ぎインライン化（一番効く）
-codegen-units = 1     # ユニット跨ぎ最適化（ビルド時間と引き換え）
+lto = "fat" # クレート跨ぎインライン化（一番効く）
+codegen-units = 1 # ユニット跨ぎ最適化（ビルド時間と引き換え）
