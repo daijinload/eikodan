@@ -1,7 +1,8 @@
 # HTMX × Rust 雑談メモ
 
-rust-htmx サンプルを触りながらの会話で出た要点を、後から見返せる形で整理。
-個別の出典は本文中にリンク。
+HTMX を採った理由と、SPA と比べて何が違うかの整理。
+lastshot の前身にあたる第一弾サンプル（Rust + HTMX + MiniJinja の TODO CRUD）を触りながらの会話が出発点で、
+行数など「サンプルの実測」はそのときの数字（lastshot 自体の計測ではない）。個別の出典は本文中にリンク。
 
 ---
 
@@ -20,22 +21,7 @@ ref: https://developer.chrome.com/blog/paint-holding
 
 ---
 
-## 2. cargo install cargo-watch は Cargo.toml に書けない
-
-**結論：書けない。`cargo install` は「PCにツールを入れる」コマンドで、プロジェクトの依存ではないため。**
-
-- `[dependencies]` / `[dev-dependencies]` は「ビルド時にリンクするライブラリ」を書く場所
-- `cargo install xxx` は `~/.cargo/bin/xxx` に独立した実行ファイルを置くだけ
-- Cargo 公式 manifest reference にも「ツール宣言用セクションは存在しない」と確認
-- 位置付け：cargoサブコマンド拡張＝VS Code拡張やgit拡張に近い
-
-ref: https://doc.rust-lang.org/cargo/commands/cargo-install.html
-
-代替：README記載 / justfile / Makefile / xtaskパターン。
-
----
-
-## 3. HTMX はバックエンド非依存（Rustだけのものではない）
+## 2. HTMX はバックエンド非依存（Rustだけのものではない）
 
 **結論：HTMXはブラウザ側のJSライブラリで、サーバ側の言語は何でもいい。**
 
@@ -54,7 +40,7 @@ ref: https://htmx.org/docs/
 
 ---
 
-## 4. SPA の構造的弱点：1画面で複数API
+## 3. SPA の構造的弱点：1画面で複数API
 
 汎用REST設計のSPAは「画面1枚 = 3〜10リクエスト」になりがち。
 
@@ -73,7 +59,7 @@ HTMX は「サーバ側でJOINして HTML で返す」1往復モデルなので�
 
 ---
 
-## 5. SPA 4大対処策は「複雑さの削減」ではなく「移動」
+## 4. SPA 4大対処策は「複雑さの削減」ではなく「移動」
 
 | 対処 | 削った複雑さ | 増えた複雑さ |
 |---|---|---|
@@ -96,7 +82,7 @@ HTMX は「サーバ側でJOINして HTML で返す」1往復モデルなので�
 
 ---
 
-## 6. HTMX は「Web 1.0回帰」ではない
+## 5. HTMX は「Web 1.0回帰」ではない
 
 SPA推進派のレッテル。実態は2010年代後半の現代ブラウザ機能の組み合わせ：
 
@@ -112,7 +98,7 @@ SPA推進派のレッテル。実態は2010年代後半の現代ブラウザ機�
 
 ---
 
-## 7. AI生成との親和性は構造的に大きい
+## 6. AI生成との親和性は構造的に大きい
 
 1. **学習データの偏り**：HTML+属性パターンはWeb史30年分。RSC系はここ1〜2年で仕様が変動 → 訓練データ少なく古い情報混入
 2. **静的解析しやすさ**：`<button hx-post="/todos">` を見れば挙動が1行で完結。React は呼び出し階層を辿らないと挙動が読めない
@@ -120,21 +106,24 @@ SPA推進派のレッテル。実態は2010年代後半の現代ブラウザ機�
 
 ---
 
-## 8. Rust で hot reload が成立する理由
+## 7. Rust で hot reload が成立する理由
 
 「Rust = ビルド遅い = フロント反復に向かない」は今回の構成では当てはまらない：
 
 | 変更箇所 | 反映方法 | 体感速度 |
 |---|---|---|
-| HTML/CSS (templates/) | minijinja-autoreload + tower-livereload | 即時 |
-| Rustロジック (src/) | cargo-watch + incremental build | 〜0.3秒 |
+| HTML/CSS (templates/) | minijinja-autoreload + tower-livereload | 即時（Rustビルドゼロ） |
+| Rustロジック | 増分ビルド + プロセス再起動 | 約1秒（端から端で ~1.2〜1.3s） |
 
 画面いじりの9割はテンプレ編集 → Rustに触らない。
 「Rustが遅い」ではなく「**Rust部分を触る回数自体が少ない設計**」になっている。
 
+> lastshot での watcher は `bacon`（`./run watch`）。Rust 変更が約1秒に収まる内訳（増分ビルド ~0.6〜0.74s +
+> cold start 0.285s）は [`cold-start.md`](./cold-start.md)。
+
 ---
 
-## 9. HTMX の守備範囲外と、その時の選択肢
+## 8. HTMX の守備範囲外と、その時の選択肢
 
 ### 向かない領域
 
@@ -191,7 +180,7 @@ React/Vue/Angular は**強制ではなく流行**。
 
 ---
 
-## 10. キャッシュ無しリロードでも16ms以下に収まる仕組み
+## 9. キャッシュ無しリロードでも16ms以下に収まる仕組み
 
 **結論：ブラウザが並列＋投機的に取得して、接続コストも再利用するので、CSS/JSを並列に7ms程度で取り切る。**
 
@@ -229,11 +218,12 @@ Chrome 2008年、Safari 2010年代から標準動作。
 
 ---
 
-## 11. コード量が最低限で済む
+## 10. コード量が最低限で済む
 
-**結論：このサンプル、設定ファイル30行・コード572行で完結。Reactで同等の物を作ると「本質じゃない設定・boilerplate・意味不明なconfig」が多くを占める。**
+**結論：第一弾サンプル（Rust + HTMX の TODO CRUD）は設定ファイル2つ・全体で 574 行で完結。
+Reactで同等の物を作ると「本質じゃない設定・boilerplate・意味不明なconfig」が多くを占める。**
 
-### このプロジェクトの実測（2026-05-17時点）
+### 実測（2026-05-17時点。lastshot ではなく第一弾サンプルの行数）
 
 ```
 src/main.rs                          226  (テスト含む)

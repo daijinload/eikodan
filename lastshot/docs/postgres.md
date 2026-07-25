@@ -116,7 +116,8 @@ SSD 側も同期書き込みしていない(VM のページキャッシュに溜
 
 6. **Docker/コンテナが遅いのは「ホスト→VM 境界」だけ。同じ Docker の内側なら native 並み**(スループット表の〔参考〕行: docker VM内 26,561 ↔ ホストから 4,389 tps)。
    → **アプリも同じ Docker 網に入れれば速度は戻る**(別コンテナならコンテナ間TCP、最速は同一コンテナ/ソケット共有)。
-   ただし Mac 開発では Rust ビルドを Docker 化する不利がある(README「Docker は内側なら速い」参照)。
+   lastshot が compose / CI で `DATABASE_URL` の TCP 接続にしているのはこれが理由。
+   ただし開発まで Docker 側に寄せると Mac では Rust ビルドが遅くなるので、**dev はネイティブ PG + unix ソケットのまま**にしている。
 
 ## 用途別のおすすめ
 
@@ -140,25 +141,10 @@ SSD 側も同期書き込みしていない(VM のページキャッシュに溜
 
 ## 再現手順
 
-```sh
-cd pg-bench && npm install
-
-# 1) 埋め込み系(即実行)
-node bench.mjs pglite pglite
-node bench.mjs pgmem  pgmem
-
-# 2) Docker(tmpfs=メモリ / SSD / 無チューニング)— docker_setup 参照
-node bench.mjs pg docker-tmpfs-tuned "postgres://postgres@127.0.0.1:5440/postgres"
-
-# 3) ネイティブ PG on RAM ディスク(下記)
-node bench.mjs pg native-ram-socket "postgresql://postgres@/postgres?host=/tmp&port=5443"
-
-# 4) Apple container
-node bench.mjs pg apple-container-pub "postgres://postgres@127.0.0.1:5444/postgres"
-
-# 集計
-node summary.mjs
-```
+上の「結果」表は Node クライアント(`pg` / `@electric-sql/pglite` / `pg-mem`)で同一ワークロード
+(init / schema / bulk seed / point SELECT / indexed SELECT / UPDATE / JOIN+agg)を叩く自作ハーネスで測った
+── 各方式に**接続文字列だけ差し替えて**同じシナリオを流し、ops/s と p50/p99 を集計する形。
+以下は**そのハーネス無しでも再現できる部分**（環境の立ち上げとスループット計測）だけを残す。
 
 RAM ディスク + ネイティブ PG の立ち上げ:
 
@@ -171,8 +157,15 @@ $PGBIN/pg_ctl -D /Volumes/pgram/pgdata -l /tmp/pgram.log \
   -o "-p 5443 -k /tmp -c fsync=off -c synchronous_commit=off -c full_page_writes=off -c shared_buffers=512MB" start
 ```
 
-RAMディスク vs 実SSD の durability 2x2(上表)を測り直す:
+スループット / durability 2x2(上表)は `pgbench` だけで測り直せる:
 
 ```sh
-bash durability_bench.sh   # 作業ディレクトリと RAM ディスクは終了時に自動で後始末(rm 対象は $TMPDIR 配下のみ)
+$PGBIN/pgbench -i -s 10 -U postgres -h /tmp -p 5443 postgres        # 初期化(scale=10)
+$PGBIN/pgbench -S -c 1 -T 30 -U postgres -h /tmp -p 5443 postgres   # c1 SELECT
+$PGBIN/pgbench -S -c 8 -T 30 -U postgres -h /tmp -p 5443 postgres   # c8 SELECT
+$PGBIN/pgbench -N -c 8 -T 30 -U postgres -h /tmp -p 5443 postgres   # c8 書き込み律速
 ```
+
+durability 2x2 は上の起動オプションを `-c fsync=on` / `off` に振り、データディレクトリを
+RAM ディスク(`/Volumes/pgram/pgdata`)と実 SSD(`~/pgdata` 等)に置き換えて同じ 4 コマンドを流す。
+測り終えたら `pg_ctl stop` + `hdiutil detach` で後始末する。

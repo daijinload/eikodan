@@ -23,17 +23,20 @@ eikodan の各サブプロジェクト（実験場）で試した結果のうち
 
 | ドキュメント | 何が書いてあるか |
 |---|---|
-| [`fast-rust.md`](./fast-rust.md) | 高速化施策の総覧と、効かなかったものの理由 |
-| [`cold-start.md`](./cold-start.md) | Rust 変更が画面に出るまでの実測。cold start の正体（codesign / systemfd / リンカ） |
+| [`cold-start.md`](./cold-start.md) | **増分ビルド + 起動**が画面に出るまでの実測（約1秒の底）。cold start の正体（codesign / systemfd / リンカ） |
+| [`build-speed.md`](./build-speed.md) | **ビルド速度の実測台帳**（規模スケール・リンカ・並列フロント・sccache・cranelift・opt-level・LTO・フルビルドの warm/cold） |
 | [`hot-reload.md`](./hot-reload.md) | 保存→ブラウザ反映の仕組み（テンプレ監視 + CSS の2系統） |
-| [`build-speed.md`](./build-speed.md) | ビルド速度の実測台帳（リンカ・並列フロント・sccache・cranelift・opt-level・LTO） |
 | [`postgres.md`](./postgres.md) | in-memory Postgres 方式の横並び比較（unix ソケットが最速） |
+
+> 速度系の3本は担当を分けてある。**「実測値そのもの」は `build-speed.md` に集約**し、
+> `cold-start.md` は増分＋起動の1秒ループ、`fast-rust.md` は施策の総覧、と役割で切っている。
+> 数字を足すときは `build-speed.md` に足して、他は要約＋リンクで済ませる。
 
 ## 設計・運用
 
 | ドキュメント | 何が書いてあるか |
 |---|---|
-| [`htmx-vs-spa.md`](./htmx-vs-spa.md) | HTMX を選んだ理由。SPA との比較・白フラッシュの正体 |
+| [`htmx-vs-spa.md`](./htmx-vs-spa.md) | HTMX を選んだ理由。SPA との比較・白フラッシュの正体・コード量 |
 | [`directory-layout.md`](./directory-layout.md) | 設定ファイルの置き場所（ルート直下 vs フォルダ集約）。自動探索と喧嘩しない置き方 |
 | [`lint-format.md`](./lint-format.md) | lint/format ツールの選定根拠（なぜ clippy 中心・Oxlint を入れないか） |
 | [`task-runner.md`](./task-runner.md) | タスクランナーの選定根拠（Make 代替 9 通りの比較。なぜ `./run` か） |
