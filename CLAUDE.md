@@ -47,6 +47,9 @@ grep -rn -E '\.\./(fastweb|connectweb|pg-bench|rust-htmx|subsecond-demo|playwrig
 ## git 運用
 
 - **マージはユーザー（daijinload）が行う。** Claude はブランチ作成と push まで。
+- **指示が無ければ push まで進める。** 「コミットだけ」等の指定が無い場合、Claude は commit → push、
+  PR が未作成なら作成まで一気にやる（PR が既にあるブランチなら push すれば自動で乗る）。
+  途中で「push しますか？」と訊いて止まらない。
 - **force push は必要なときだけ。** 使ってよいのは**履歴を書き換えた直後**（`git rebase` で main を
   取り込んだ / commit を amend した 等）に限る。通常の追加コミットで force を付けない ──
   push が弾かれたら、まず**なぜ弾かれたのか**を確かめること（他所からの push を消しかけている可能性がある）。
