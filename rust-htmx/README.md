@@ -1,5 +1,8 @@
 # rust-htmx プロジェクト
 
+> **役割: 実験場（アーカイブ / 第一弾）。** HTMX を選んだ理由・SPA との比較メモは
+> [`lastshot/docs/htmx-vs-spa.md`](../lastshot/docs/htmx-vs-spa.md) に移した。本体は [`lastshot/`](../lastshot/)。
+
 Rust + HTMX + MiniJinja + DaisyUI で組んだ TODO CRUD サンプル。
 親リポジトリ「eikodan」（理想のWebシステムを模索する曳光弾）の第一弾。
 package by featureでcrate分けてビルド高速化を狙う予定だがサンプルなのでベタ置きしている。

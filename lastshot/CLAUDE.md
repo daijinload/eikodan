@@ -94,3 +94,8 @@
 - マージはユーザー（daijinload）が行う。Claude は作成/push まで。force push しない。
 - 生成コード（proto codegen 等）はコミットしない（OUT_DIR 生成のまま＝単一バイナリ前提・差分ノイズ回避）。
 - プロジェクト知識はリポジトリのドキュメント（README/CLAUDE）に残す（Claude 個人メモリには eikodan の知識を保存しない。ルート `CLAUDE.md` 参照）。
+- **調査結果・実測値・設計判断は [`docs/`](./docs/) に置く**（`README.md` は使い方、ここは「なぜ」）。
+  足したら [`docs/README.md`](./docs/README.md) の索引に1行足す。1行足せないなら新規ファイルを作らず既存の節にする。
+  ファイル名は `lower-kebab-case.md`。
+- **採らなかったものは [`docs/decisions/`](./docs/decisions/) に記録して消さない。** 実測値と理由をセットで残す
+  （同じ検討を二度しないため）。判断がひっくり返ったら元の記述を消さず経緯を追記する。

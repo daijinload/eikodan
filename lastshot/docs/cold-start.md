@@ -2,9 +2,9 @@
 
 開発ループ層2（ハンドラ・service 層など **Rust の変更**）が画面に反映されるまでの時間を実測し、
 「**1秒以内に反映できるか / cold start を縮められるか**」を調べた記録。
-層1（テンプレ・CSS・HTMX属性）はビルドゼロで即反映なので対象外（[`README.md`](./README.md) 開発ループ参照）。
+層1（テンプレ・CSS・HTMX属性）はビルドゼロで即反映なので対象外（[`README.md`](../README.md) 開発ループ参照）。
 
-実測根拠重視（[`CLAUDE.md`](./CLAUDE.md) 「推測で埋めない」）。環境は macOS 26 (Darwin 25.5.0) / Apple Silicon
+実測根拠重視（[`CLAUDE.md`](../CLAUDE.md) 「推測で埋めない」）。環境は macOS 26 (Darwin 25.5.0) / Apple Silicon
 (aarch64-apple-darwin) / nightly + lld + sccache。
 
 ## 結論（先に）
@@ -59,9 +59,9 @@
 - **差分ビルド (hot loop) は別軸** ── `touch 1 feature → cargo build -p app` の差分ビルドでは
   `CARGO_INCREMENTAL=0` 下で **dev nightly+full 0.78s / dev stable+plain 0.63s（5 試行 median、stable が
   -0.15s/-19%）**。nightly チューニング（cranelift / -Z threads / lld）は **cold 局面に旨味が集中**し、
-  hot loop には微弱に逆効果という非対称が出ている。詳細は [`fastweb/BENCHMARK.md` ⑦](../fastweb/BENCHMARK.md)。
+  hot loop には微弱に逆効果という非対称が出ている。詳細は [`build-speed.md` ⑦](./build-speed.md)。
 - 詳細な分解（cranelift / -Z threads / lld 個別の効きや sccache warm 同士の差の理由、incr=OFF + 差分ビルド
-  の追加計測）は [`fastweb/BENCHMARK.md` ⑦](../fastweb/BENCHMARK.md)。
+  の追加計測）は [`build-speed.md` ⑦](./build-speed.md)。
 
 ### 参考: 増分・no-op の実測（フルビルドとの対比）
 
@@ -72,7 +72,7 @@
 
 **ポイント**: 日常の dev ループは増分ビルド側（~0.6〜0.7s）で回るので、約1秒の底もそちらの話。フルビルドが
 warm 6s に収まる事実は「節目で動作確認するときに気楽に待てる」上乗せであって、増分・check（package by feature）の
-hot loop の主役交代ではない（package by feature の効きは [`fastweb/BENCHMARK.md` ③⑦(e)](../fastweb/BENCHMARK.md)）。
+hot loop の主役交代ではない（package by feature の効きは [`build-speed.md` ③⑦(e)](./build-speed.md)）。
 
 ## cold start の正体（なぜ exec→listening に 0.28s かかるか）
 
@@ -183,7 +183,7 @@ opt-level = 0
 codegen-backend = "cranelift"        # 依存も Cranelift（旧: 依存だけ llvm 強制 → 実測で差ゼロのため撤回）
 ```
 
-実測（[`fastweb/BENCHMARK.md`](../fastweb/BENCHMARK.md) ②③、小クレート構成 / 巨大1クレート構成の両方）:
+実測（[`build-speed.md`](./build-speed.md) ②③、小クレート構成 / 巨大1クレート構成の両方）:
 **cranelift on/off で差はノイズ（±5% 以内）**。`{cranelift on/off} × {threads on/off}` の 2×2 でフル/増分とも測ったが、
 有意差は `-Z threads` の方だけから来る。
 
@@ -197,7 +197,7 @@ Cranelift は **rustc パイプラインの最終段（コード生成: LLVM IR 
 2. **支配項はフロント（型チェック・borrow check・マクロ展開）**。codegen の絶対量が小さいので、そこを速くしても全体は動かない。
    `-Z threads` がフロントを並列化するのは効くが、Cranelift はフロントに触らない。
 3. **lastshot 固有**: 自前クレートが 50〜200 行と小さく、codegen の絶対量自体が微小。依存は ⑥ で opt-level=0 に
-   揃え、`codegen-backend` も `cranelift` に統一した（[`fastweb/BENCHMARK.md`](../fastweb/BENCHMARK.md) ⑤ 末尾の
+   揃え、`codegen-backend` も `cranelift` に統一した（[`build-speed.md`](./build-speed.md) ⑤ 末尾の
    検証：依存 cranelift vs llvm で wall は ±0.2s = 誤差、fallback warning 無し）。`opt=0` では LLVM が fast path
    なので backend を揃えても揃えなくても差は出ない、を実測で再確認した上で「カーブアウトを置かない」方を選んでいる。
 
@@ -213,7 +213,7 @@ Cranelift は **rustc パイプラインの最終段（コード生成: LLVM IR 
 
 ### ⑥ dev profile を全クレート opt-level=0 に統一 → 反復速度に全振り（旧: 依存=3 の非対称を撤回）
 
-dev ループの評価軸は**反復速度**だけ・本番動作速度は `[profile.release]`（opt-3）と必要なら `release-max`（opt-3 + LTO + cgu=1）が担保する、と profile の役割を明確に分ける。実測根拠は [`fastweb/BENCHMARK.md` ⑥](../fastweb/BENCHMARK.md)。
+dev ループの評価軸は**反復速度**だけ・本番動作速度は `[profile.release]`（opt-3）と必要なら `release-max`（opt-3 + LTO + cgu=1）が担保する、と profile の役割を明確に分ける。実測根拠は [`build-speed.md` ⑥](./build-speed.md)。
 
 **配線**: `Cargo.toml` の `[profile.dev]` を自前も依存も opt-level=0 にする:
 
@@ -246,7 +246,7 @@ codegen-backend = "cranelift"          # 依存も Cranelift で統一（実測�
 | 差分 | **-10.8s (-45%)** | -76% | -17% | +0.22ms |
 
 (lastshot, dev profile, `cargo clean` + `RUSTC_WRAPPER=` で sccache 無効化, oha -c 50 -z 15s。
-詳細は [`fastweb/BENCHMARK.md` ⑤](../fastweb/BENCHMARK.md))
+詳細は [`build-speed.md` ⑤](./build-speed.md))
 
 **撤回した理由**:
 - 「初回のみのコスト」の前提が**半分しか正しくない**。`target/` が残っている間は確かに無料だが、
@@ -263,7 +263,7 @@ codegen-backend = "cranelift"          # 依存も Cranelift で統一（実測�
   追加検証で `cranelift` に統一（wall ±0.2s = 誤差・fallback warning 無し、自前と揃える＝カーブアウトを置かない方を選んだ）。
   依存が opt=0 になったぶん codegen の絶対量はさらに小さい。
 - **sccache**: 「重い依存をキャッシュから返す」効果は依然あるが、依存ビルド自体が opt=0 で元より軽いので
-  **当時の数値ほど劇的ではない**（[`fastweb/BENCHMARK.md` ④](../fastweb/BENCHMARK.md) 末尾「新構成（全 opt-0）での再計測」）。
+  **当時の数値ほど劇的ではない**（[`build-speed.md` ④](./build-speed.md) 末尾「新構成（全 opt-0）での再計測」）。
   実測: 30 クレートのフル再ビルドで `incr ON` -13% / `incr OFF` -52%、90 クレートでは `incr ON` が +14% で **悪化**（依存節約を
   sccache 往復が食い潰す）/ `incr OFF` -39%。日常ループは `incr ON` が baseline と誤差、`incr OFF` は税
   （check +0.1〜0.2s、build +0.2〜0.5s）。**`incr OFF` はフル再ビルドが多い環境（CI / worktree 切替多用 / `cargo clean`
@@ -280,7 +280,7 @@ codegen-backend = "cranelift"          # 依存も Cranelift で統一（実測�
   スキーマファースト故に**構造変更に寄りがち** → hot-patch が効くのは「service 層の関数本体だけいじる」薄いスライスのみ。
 - **AI 高速開発と相性が悪い**: 当てられない時に黙ってフォールバック/部分更新する曖昧さは事故のもと。
   clean に再起動して fail-fast にするほうが安全（lazy DB 接続を避けるのと同じ判断）。
-- [`README.md`](./README.md) の除外方針（subsecond は axum 素組に非対応＝Dioxus 移行が要る）とも整合。
+- [`README.md`](../README.md) の除外方針（subsecond は axum 素組に非対応＝Dioxus 移行が要る）とも整合。
 
 ## 推奨アクション
 

@@ -201,7 +201,7 @@ sccache をバイパスして純粋な opt-level コストを見る。ランタ�
 | 差分（warm） | — | ±0s | ±0.2s | -約10% |
 
 - **wall は完全に誤差範囲**（warm trial で ±0.2s 以内・cold trial も同程度）。dev=opt-0 では LLVM が fast path
-  なので cranelift と LLVM の codegen 時間差は元々小さい、を再確認した（COLD-START.md §⑤ の理屈通り）。
+  なので cranelift と LLVM の codegen 時間差は元々小さい、を再確認した（cold-start.md §⑤ の理屈通り）。
 - **rustc CPU は約-10%**（依存の codegen が cranelift で軽くなる分）。ただし cargo がクレート並列で既にコアを
   飽和させているため、CPU 減は wall に乗らない（並列度の天井に当たって直列化される）。
 - **fallback warning 無し**: 依存に未対応 intrinsic で LLVM へ落ちるクレートは（lastshot の依存グラフでは）出なかった。
@@ -349,11 +349,11 @@ warm median は B 5.77s / C 6.30s で release が +0.5s 程度遅い。重い依
 warm median は A 6.05s / B 5.77s で stable+plain のほうが 0.28s (+5%) 速い。ただし A の warm spread が 0.55s と
 広い（trial 5 で 6.46s まで上振れ）ので、median 差 0.28s は spread に埋もれる誤差圏。**lastshot 規模では
 nightly のチューニング (cranelift / -Z threads / lld) が warm では効かない、むしろわずかに重い側に出る**ことを
-裏取り（FAST-RUST.md §2.2 と整合）。
+裏取り（fast-rust.md §2.2 と整合）。
 
 - 効き始める閾値: **-Z threads** は「1 クレートが巨大化したフルビルド」で約 2 倍（③ 参照）、
   **cranelift** は codegen 律速の自前構成（lastshot 規模ではまだ来ていない）、**lld** は apple-ld と
-  そもそも差がない（[`COLD-START.md` §③](../lastshot/COLD-START.md)）。今日の構成では一つも効いていない。
+  そもそも差がない（[`cold-start.md` §③](./cold-start.md)）。今日の構成では一つも効いていない。
 - **規模を増やさない設計（package by feature の葉クレート分割）を守る限り、stable + 素のツールに降りても
   warm ビルド速度は落ちない**（むしろ気持ち速くなる）。nightly を残す理由は今日も「将来の保険」+ true cold での効き。
 
@@ -419,7 +419,7 @@ app の再リンク ── では **nightly+cranelift より stable+LLVM のほ�
 
 **含意**: nightly チューニング (cranelift / -Z threads / lld) の旨味は **cold (節目) に集中**しており、
 ユーザーが実際に踏む頻度の高い **incr (hot loop) では微弱に逆効果** という非対称が出ている。
-FAST-RUST.md §2.2 の「nightly は将来の保険」は warm 観点では維持しつつ、「hot loop では今は -0.15s だけ
+fast-rust.md §2.2 の「nightly は将来の保険」は warm 観点では維持しつつ、「hot loop では今は -0.15s だけ
 stable のほうが速い」を素直に併記しておく。
 
 **(i) `CARGO_INCREMENTAL=0` の他モードへの効き**

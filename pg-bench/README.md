@@ -1,11 +1,15 @@
 # pg-bench
 
+> **役割: 実験場（アーカイブ）。** 結論は本体 [`lastshot/`](../lastshot/) に取り込み済み（開発時は
+> ネイティブPG + unix ソケット）。考察は [`lastshot/docs/postgres.md`](../lastshot/docs/postgres.md) に移した。
+> この README は計測を再現するための手順として残している。
+
 「最速 Postgres、かつ SSD ではなくメモリに書く」を Mac 上でどう実現するかを、
 **アプリから接続した時の実効速度**で横並び比較するベンチ。
 
 対象: PGlite / pg-mem / Docker(tmpfs・SSD) / Apple container / ネイティブPG on RAMディスク。
 
-- 結果と考察 → [POSTGRES_BENCHMARK.md](./POSTGRES_BENCHMARK.md)
+- 結果と考察 → [lastshot/docs/postgres.md](../lastshot/docs/postgres.md)
 - 計測コード → [bench.mjs](./bench.mjs)(バックエンドごとに別プロセスで起動)
 - 集計 → `node summary.mjs`(`results/*.json` を Markdown 表に)
 
@@ -16,7 +20,7 @@ node bench.mjs pg <label> <conn>  # サーバ型は接続文字列を渡す
 node summary.mjs
 ```
 
-サーバ型の立ち上げ・チューニング・RAMディスク作成は [POSTGRES_BENCHMARK.md](./POSTGRES_BENCHMARK.md) の「再現手順」を参照。
+サーバ型の立ち上げ・チューニング・RAMディスク作成は [lastshot/docs/postgres.md](../lastshot/docs/postgres.md) の「再現手順」を参照。
 
 ## 一行結論
 
@@ -26,7 +30,7 @@ Mac で最速かつ高互換なのは **ネイティブPostgresを立てて unix
 
 > ⚠️ 計測はすべて **macOS (Apple Silicon)**。「durable でも RAM≒SSD」は macOS の fsync が物理フラッシュしないため成り立つ話で、Linux では `fsync=on` 時に RAM ディスクが効く。OS が変われば結論も変わりうる。
 
-詳細は [POSTGRES_BENCHMARK.md](./POSTGRES_BENCHMARK.md) の「RAMディスク vs SSD を分離して再検証」。
+詳細は [lastshot/docs/postgres.md](../lastshot/docs/postgres.md) の「RAMディスク vs SSD を分離して再検証」。
 
 ## 採用構成と起動方法
 
@@ -39,7 +43,7 @@ Mac で最速かつ高互換なのは **ネイティブPostgresを立てて unix
 (`fsync=off` 運用なので、クラッシュ時は潰して `initdb` し直す使い捨て前提)
 
 > SSD の書き込み摩耗を避けたい場合は、データディレクトリを RAM ディスクに置く手もある(速度はほぼ同じだが SSD への物理書き込みが消える)。
-> 手順は [POSTGRES_BENCHMARK.md](./POSTGRES_BENCHMARK.md) の「再現手順」。
+> 手順は [lastshot/docs/postgres.md](../lastshot/docs/postgres.md) の「再現手順」。
 
 ### 起動 / 停止
 
@@ -86,7 +90,7 @@ echo 'export PATH="/opt/homebrew/opt/postgresql@17/bin:$PATH"' >> ~/.zprofile
 ### 仕組み
 
 - 遅さの正体は macOS Docker Desktop の `ホスト→Linux VM` 往復(+0.05〜0.19ms/クエリ)。
-- **同一 Docker 内なら native 並み**(VM内 26,561 tps ↔ ホストから 4,389 tps)。→ [POSTGRES_BENCHMARK.md](./POSTGRES_BENCHMARK.md)「わかったこと #6」。
+- **同一 Docker 内なら native 並み**(VM内 26,561 tps ↔ ホストから 4,389 tps)。→ [lastshot/docs/postgres.md](../lastshot/docs/postgres.md)「わかったこと #6」。
 - ただし「アプリを別コンテナ」に置くと `コンテナ間TCP(ブリッジ網)`になり、ホスト経由よりは速いが unix ソケットよりは落ちる。
   最速を狙うなら **同一コンテナ or ソケットを共有ボリュームで渡す**。
 

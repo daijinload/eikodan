@@ -12,17 +12,47 @@
   * Rust側でMiniJinjaを使うことによりHTMX部分はコンパイル無しで開発できる
 * 自動テストがあること
 
-## サブプロジェクト
+## 本体
 
 | ディレクトリ | 概要 |
 | --- | --- |
-| [rust-htmx](./rust-htmx/) | Rust + HTMX + MiniJinja + DaisyUI の TODO CRUD サンプル（第一弾） |
-| [subsecond-demo](./subsecond-demo/) | Dioxus 0.7 + subsecond による Rust コードのホットパッチ検証デモ |
-| [fastweb](./fastweb/) | 「ビルドを避けて開発する」に全振りした Rust + HTMX スタック |
-| [connectweb](./connectweb/) | .proto を単一の真実に、生成型から HTML / JSON / Connect API を駆動 |
-| [pg-bench](./pg-bench/) | 「最速 Postgres をメモリに書く」を実効速度で横並び比較するベンチ |
-| [playwright-sample](./playwright-sample/) | Microsoft Playwright の E2E テストサンプル（Playwright MCP は評価のうえ不採用。比較は同 README） |
-| [lint-format](./lint-format/) | lint/format ツールを種別ごとのサンプルで実演する showcase（rustfmt・clippy・oxfmt・buf・shfmt/shellcheck・sqlfluff） |
+| **[lastshot](./lastshot/)** | **最終進化形態。各サブプロジェクトの結論を全部統合した本番実装** |
+| ├ [lastshot/docs](./lastshot/docs/) | **知見の集約先。実測・設計判断・採否記録はすべてここ** |
+| └ [lastshot/docs/decisions](./lastshot/docs/decisions/) | 採用/不採用の判断記録（「これ試したっけ？」はここ） |
+
+**ドキュメントを探すなら [`lastshot/docs/README.md`](./lastshot/docs/README.md) が入口です。**
+
+## 実験場（アーカイブ）
+
+個別要素を試した曳光弾。**結論は lastshot に取り込み済みで、ドキュメントは
+[`lastshot/docs/`](./lastshot/docs/) に集約済み**。ここに残しているのは**再現用のコードと手順**です。
+
+| ディレクトリ | 何を試したか | 出た結論の行き先 |
+| --- | --- | --- |
+| [rust-htmx](./rust-htmx/) | Rust + HTMX + MiniJinja + DaisyUI の TODO CRUD（第一弾） | [`docs/htmx-vs-spa.md`](./lastshot/docs/htmx-vs-spa.md) |
+| [subsecond-demo](./subsecond-demo/) | Dioxus 0.7 + subsecond による Rust コードのホットパッチ | **不採用** → [`decisions/0001`](./lastshot/docs/decisions/0001-subsecond-hotpatch.md) |
+| [fastweb](./fastweb/) | 「ビルドを避けて開発する」に全振りしたビルド高速化 | [`docs/build-speed.md`](./lastshot/docs/build-speed.md) / [`docs/hot-reload.md`](./lastshot/docs/hot-reload.md) |
+| [connectweb](./connectweb/) | .proto を単一の真実に、生成型から HTML / JSON / Connect API を駆動 | [`lastshot/CLAUDE.md`](./lastshot/CLAUDE.md) スキーマファーストの掟 |
+| [pg-bench](./pg-bench/) | 「最速 Postgres をメモリに書く」を実効速度で横並び比較 | [`docs/postgres.md`](./lastshot/docs/postgres.md) |
+| [playwright-sample](./playwright-sample/) | Playwright の E2E サンプル + Playwright MCP の評価 | MCP は**不採用** → [`decisions/0002`](./lastshot/docs/decisions/0002-playwright-mcp.md) |
+| [lint-format](./lint-format/) | lint/format ツールを種別ごとに実演する showcase | [`lastshot/lint/`](./lastshot/lint/) |
+| [task-runners](./task-runners/) | 「Makefile の代わりに何を使うか」を 9 通りで横並び比較 | `lastshot/run`（自作 bash ディスパッチャ） |
+
+### 比較用の実装はブランチに置く
+
+他スタックとの比較（Node.js / Next.js / Laravel）は**実装をマージせず、ドキュメントだけを main に入れる**運用です。
+
+| ブランチ | 中身 | ドキュメント |
+| --- | --- | --- |
+| [`bench-rust-vs-node`](https://github.com/daijinload/eikodan/tree/bench-rust-vs-node) | `lastshot-node/` | [`docs/bench/rust-vs-node-db.md`](./lastshot/docs/bench/rust-vs-node-db.md) |
+| [`feat/lastshot-3stack-compare`](https://github.com/daijinload/eikodan/tree/feat/lastshot-3stack-compare) | `lastshot-bench/` `lastshot-next/` `lastshot-laravel/` | [`docs/bench/3stack-heavy-screen.md`](./lastshot/docs/bench/3stack-heavy-screen.md) |
+
+## リポジトリ共通のドキュメント
+
+| ファイル | 内容 |
+| --- | --- |
+| [CLAUDE.md](./CLAUDE.md) | AIエージェント向けの共通方針（ドキュメントをどこに書くか） |
+| [directory-layout.md](./directory-layout.md) | 設定ファイルの置き場所の方針（ルート直下 vs フォルダ集約） |
 
 ## agent-browser のインストール
 

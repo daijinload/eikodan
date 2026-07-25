@@ -1,5 +1,8 @@
 # connectweb
 
+> **役割: 実験場（アーカイブ）。** スキーマファーストの結論は本体 [`lastshot/`](../lastshot/) に取り込み済み
+> （作法は [`lastshot/CLAUDE.md`](../lastshot/CLAUDE.md)）。知見の索引は [`lastshot/docs/`](../lastshot/docs/)。
+
 **スキーマ（.proto）を「単一の真実」に置き、1つの生成型から HTML・埋め込みJSON・Connect API
 の3経路を同時に駆動する** Rust スタックの曳光弾。[fastweb](../fastweb/) のビルド高速化と
 package-by-feature をそのまま土台にし、その上に「スキーマファーストの共存」を載せたもの。
@@ -14,7 +17,7 @@ package-by-feature をそのまま土台にし、その上に「スキーマフ�
 | API と画面の一致 | 別々 | **同じ `get_user`・同じ型から両方が生まれる** |
 
 土台（MiniJinja 実行時テンプレ / HTMX / daisyUI / lld / dev=全クレート opt-level 0 / sccache / 葉クレート）は
-fastweb と同一。ビルド速度の実測根拠は [`fastweb/BENCHMARK.md`](../fastweb/BENCHMARK.md)。
+fastweb と同一。ビルド速度の実測根拠は [`lastshot/docs/build-speed.md`](../lastshot/docs/build-speed.md)。
 
 ## 設計の核（aaa.txt の議論の結論）
 

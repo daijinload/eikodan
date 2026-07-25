@@ -26,7 +26,7 @@ serde_json = "1"
 #   依存クレート  = opt-level 0（フルビルドのコストを最小化）
 # 以前は依存だけ opt-level 3 で焼いていたが、cargo clean / 新規checkout / depsが変わるブランチ
 # 切替のたびにコストを払う一方、dev 動作の便益は手元の操作頻度では体感ゼロ・負荷試験は release
-# でやるので不要 = 撤回した。実測根拠: ../fastweb/BENCHMARK.md ⑤
+# でやるので不要 = 撤回した。実測根拠: ../lastshot/docs/build-speed.md ⑤
 # ───────────────────────────────────────────────────────────
 [profile.dev]
 opt-level = 0
@@ -36,4 +36,4 @@ codegen-backend = "cranelift"  # 自前は Cranelift（保険。dev=opt0 では 
 
 [profile.dev.package."*"]
 opt-level = 0
-codegen-backend = "cranelift"  # 依存も Cranelift で統一（lastshot で wall ±0.2s = 誤差・fallback warning 無しを実測。../fastweb/BENCHMARK.md ⑤）
+codegen-backend = "cranelift"  # 依存も Cranelift で統一（lastshot で wall ±0.2s = 誤差・fallback warning 無しを実測。../lastshot/docs/build-speed.md ⑤）

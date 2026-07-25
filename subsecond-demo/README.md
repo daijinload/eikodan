@@ -1,5 +1,9 @@
 # subsecond-demo
 
+> **役割: 実験場（アーカイブ）。** 検証の結果 **subsecond は不採用**。理由は
+> [`lastshot/docs/decisions/0001-subsecond-hotpatch.md`](../lastshot/docs/decisions/0001-subsecond-hotpatch.md)。
+> このデモと下記の制約一覧は、判断の根拠として残している。
+
 Dioxus 0.7 + subsecond によるRustコードのホットパッチ検証用デモ。
 親リポジトリ「eikodan」（理想のWebシステムを模索する曳光弾）の subsecond 検証成果物。
 
@@ -38,7 +42,7 @@ dx のログに `Hot-patching: ... took XXXms` が出れば subsecond が動い�
 
 ## 計測結果（macOS 26.4.1 / Apple Silicon / Rust 1.91.1）
 
-詳細は [`../rust-htmx/readme.md`](../rust-htmx/readme.md) の「Rust側コードのホットリロード比較」を参照。
+詳細は [`../rust-htmx/README.md`](../rust-htmx/README.md) の「Rust側コードのホットリロード比較」を参照。
 
 要約: 2回目以降 約 200〜300ms。axum + cargo-watch の約1.4秒に対し **約6倍速**。
 
