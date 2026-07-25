@@ -51,7 +51,7 @@
 # 2) ビルド補助
 brew install sccache      # 必須。.cargo/config.toml が rustc-wrapper に指定している
 brew install protobuf     # schema/build.rs の codegen が protoc を使う
-# 3) Postgres（ネイティブ＝開発の既定。pg-bench の結論で unix ソケット最速）
+# 3) Postgres（ネイティブ＝開発の既定。unix ソケットが最速 → docs/postgres.md）
 brew install postgresql@17
 # 4) Docker Desktop（マイグレーション = Flyway を docker image で実行。compose / CI も同じ）
 #    起動しておくだけ（`./run db-migrate` が host.docker.internal 経由で native PG に繋ぐ）
@@ -115,11 +115,12 @@ migrations/V20260614153500__seed_counter.sql    # 初期行 id=1, value=0
 > 付けない）。既存DBに後付けで Flyway を入れる場合は履歴が無く既存テーブルと衝突するので、
 > 一度 `./run db-reset` してまっさらにしてから流す。
 
-## 開発ループ（3層）
+## 開発ループ（4層）
 
 1. **テンプレ・CSS・HTMX属性** → 保存で即反映（Rustビルドゼロ。作業の7〜8割）。`./run dev` 起動中にテンプレを直すだけ。
 2. **ハンドラ・サービス層（get_count 等）** → 該当クレートだけ数秒で再ビルド。`./run watch`（bacon）が裏で回る前提。
 3. **スキーマ（.proto）** → `schema` クレートで codegen が走る（proto を触ったときだけ）。
+4. **DBスキーマ（migrations）** → `migrations/` に `V<timestamp>__*.sql` を足して `./run db-migrate`（上記「マイグレーション」）。Rustビルドには影響しない。
 
 ```sh
 ./run watch               # bacon（既定=check）: 保存で型チェックを回す。サーバ起動/再起動はしない
@@ -128,22 +129,26 @@ migrations/V20260614153500__seed_counter.sql    # 初期行 id=1, value=0
 ./run release             # 本番相当(stable + release + 本番CSS)でローカル起動（後述「3つのモード」）
 ```
 
-### 3つのモード（CSS × ツールチェイン）
+### 4つのモード（CSS × ツールチェイン × プロファイル）
 
 | モード | コマンド | CSS | ツールチェイン/プロファイル | 用途 |
 |---|---|---|---|---|
 | 高速開発 | `./run dev` | CDN（ブラウザJIT・ビルドゼロ） | nightly / debug | 日常の作業（7〜8割） |
 | CSSビルド開発 | `CSS=built ./run dev` | CLI生成 `/static/app.css` | nightly / debug | 本番CSSの最終目視（往復で再ビルドしない） |
-| **リリース** | `./run release` | CLI生成（minify・release は常にこちら） | **stable / release** | 本番に出すのと同じ build をローカルで実行 |
+| **リリース** | `./run release` | CLI生成（minify・release は常にこちら） | **stable / release**（Rust既定 opt-3 のみ） | 本番に出すのと同じ build をローカルで実行 |
+| デプロイ相当 | `./run release-max` | 同上 | **stable / release-max**（opt-3 + LTO=fat + cgu=1） | 最大最適化での動作確認・比較（ビルドは約3.2倍かかる） |
 
-`./run release` は **dev=nightly のまま本番だけ stable** にするための入口（Docker と同じ仕組み）:
+`./run release` / `./run release-max` は **dev=nightly のまま本番だけ stable** にするための入口（Docker と同じ仕組み）:
 `assets/tailwindcss` で本番CSSを minify 生成 → `assets/strip-nightly.sh` で Cargo.toml の nightly 専用行を
-一時的に剥がす（`trap` で必ず復元） → `RUSTUP_TOOLCHAIN=stable RUSTFLAGS="" cargo run --release -p app`。
-DB は dev と同じ native（`./run db-setup` 済み前提）。`./run css-setup` でTailwindを取得していること。
+一時的に剥がす（`trap` で必ず復元） → `RUSTUP_TOOLCHAIN=stable RUSTFLAGS="" cargo run --release -p app`
+（`release-max` は `--profile release-max`）。成果物は `target/release/` と `target/release-max/` に分かれて共存するので、
+同条件で並べて比較できる。DB は dev と同じ native（`./run db-setup` 済み前提）。`./run css-setup` でTailwindを取得していること。
 
 > Rust 変更の反映は再ビルド + プロセス再起動で約1秒（体感の端から端は ~1.2〜1.3s）。
 > cold start の正体・短縮策（codesign / systemfd / リンカ）の実測は [`docs/cold-start.md`](./docs/cold-start.md)。
 > 設計とビルドツール両面の高速化施策の総まとめは [`docs/fast-rust.md`](./docs/fast-rust.md)。
+> `release` と `release-max` の実測差（throughput +2.0% / バイナリ -34% / build 約3.2倍）は
+> [`docs/build-speed.md` ⑥](./docs/build-speed.md)。
 
 ## CSS（日常はCDN・最終確認だけビルド）
 
@@ -264,7 +269,7 @@ runner は `ubuntu-24.04-arm`（ローカル Apple Silicon・arm64 Docker と**�
 setup 区間は**推測せず ARM 実機ベンチで効果を測って**取捨選択した:
 
 - **採用**: semgrep を `pipx`→`uv tool install`（導入 ~16s→~2.5s）/ `apt-get update` 省略（失敗時のみ
-  update→retry で自己回復）/ postgres `17`→`17-alpine`（コンテナ初期化 ~13s→~9s）。
+  update→retry で自己回復）/ postgres `17`→`17-alpine`（コンテナ初期化 ~14s→~10s）。
 - **採用キャッシュ① `Swatinem/rust-cache`（cargo+target, build ~76s→~15s）**＝本命。`nextest` も
   `taiki-e/install-action` で導入済みキャッシュ。
 - **採用キャッシュ② Playwright Chromium + npm（`actions/cache` で `~/.cache/ms-playwright` +
@@ -309,7 +314,7 @@ lastshot/
   （CI は monorepo 直下の ../.github/workflows/lastshot-ci.yml。GitHub は root の .github しか実行しないため）
 ```
 
-高速化フラグの位置は fastweb と同じ（リンカ/threads/sccache=`.cargo/config.toml`、nightly=`rust-toolchain.toml`、
+高速化フラグの置き場所は3か所に分かれている（リンカ/threads/sccache=`.cargo/config.toml`、nightly=`rust-toolchain.toml`、
 dev=全クレート opt-level 0 / Cranelift=`Cargo.toml`）。これらは **dev(nightly) 向け**で、**本番(Docker)は stable で焼く**
-（`RUSTUP_TOOLCHAIN=stable` + `assets/strip-nightly.sh`。上記「結合・本番ビルド」参照）。
+（`RUSTUP_TOOLCHAIN=stable` + `assets/strip-nightly.sh`。上記「4つのモード」「CI / コンテナ」参照）。
 実測根拠は [`docs/build-speed.md`](./docs/build-speed.md)。

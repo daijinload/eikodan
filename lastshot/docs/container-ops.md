@@ -44,7 +44,7 @@ GHA のランナー自体がもう使い捨て VM なので、速さ目的だけ
 ```yaml
 services:
   postgres:
-    image: postgres:16
+    image: postgres:17-alpine   # lastshot の CI もこれ（pull が軽く初期化 ~14s→~10s）
     env:
       POSTGRES_PASSWORD: postgres
     options: >-

@@ -1,7 +1,8 @@
 # FAST-RUST — Rust 開発を加速するためにやったこと（総まとめ）
 
-eikodan の各サブプロジェクト（fastweb / connectweb / pg-bench / subsecond-demo）の試行を踏まえて
-lastshot で採った高速化施策の一覧。実測根拠と「効かなかった理由」は各リンク先に。
+lastshot で採った高速化施策の一覧（各実験場での試行を踏まえた「今の結論」）。
+**このファイルは施策の総覧＝目次で、実測値そのものは [`build-speed.md`](./build-speed.md) に集約**してある。
+「効かなかった理由」は各リンク先、採否の一覧は [`decisions/`](./decisions/)。
 
 ## 1. 設計で稼ぐ（そもそもビルドしない）
 
@@ -12,11 +13,9 @@ lastshot で採った高速化施策の一覧。実測根拠と「効かなか�
 3. **`sqlx::query!` 不使用 + codegen を `schema` クレートに隔離** — コンパイル時に DB 接続を要求せず、
    protoc は proto を触った時だけ走る。dev のビルド時依存を最小化。詳細は [`CLAUDE.md`](../CLAUDE.md) の「DB 作法」。
 4. **Rust 変更時は約1秒が底（通常開発の増分ビルドの話）** — 「ファイル1個 touch して `cargo build -p app`」の
-   増分ビルドが ~0.6〜0.74s + cold start 0.285s + ブラウザ再描画 ＝ 体感 ~1.2〜1.3s。フルビルドではない。
-   参考: フルビルド（`cargo clean` 後）は **sccache warm（普段の状態）で ~5.8〜6.3s** ／ **true cold（sccache 空、節目）で
-   10〜20s（構成依存大: dev nightly+full ~10.6s / dev stable+plain ~12.8s / release stable+opt-3 ~20.1s）**、no-op は **~0.1s**。
-   warm/cold の分かれ目は「sccache のキャッシュキーが世代交代したか」（新規 clone / sccache パージ / 別 toolchain で焼いた直後
-   等で cold になる）。実測内訳は [`cold-start.md`](./cold-start.md) と [`build-speed.md` ⑦](./build-speed.md)。
+   増分ビルドが ~0.6〜0.74s + cold start 0.285s + ブラウザ再描画 ＝ 体感 ~1.2〜1.3s。内訳は
+   [`cold-start.md`](./cold-start.md)。**これは増分の話でフルビルドではない**（フルビルドは warm ~5.8〜6.3s /
+   true cold 10〜20s ＝ [`build-speed.md` ⑦](./build-speed.md)）。
 5. **cold start ~285ms の正体は macOS の起動時セキュリティ検証** — リンカが ad-hoc 署名した「中身の違う新バイナリ」を
    毎リビルド exec する度に `syspolicyd` / `AMFI` / `trustd` が検証する。`codesign -f -s -` で**署名を付け直すと
    初回検証が軽くなって ~100ms 短縮**（検証を完全に消すわけではなく軽くなる）。**唯一効いた起動側の施策**。
@@ -24,14 +23,12 @@ lastshot で採った高速化施策の一覧。実測根拠と「効かなか�
 
 ## 2. ビルドツール側で稼ぐ（ビルドが走る時に速く）
 
-1. **dev profile は全クレート opt-level=0（フルビルドを最小化）** — `[profile.dev]` 自前=0 / 
-   `[profile.dev.package."*"]` 依存も=0 に統一。以前は依存だけ opt-level=3 で焼いていた（dev でも実行を
-   速くしたい狙い／"効いてる本命"と書いていた）が、実測でコスト/便益が割に合わず撤回した:
-   フルビルド +約11秒 / -45% のコストを `cargo clean` / 新規 checkout / deps 違いブランチ切替のたびに
-   払う一方で、dev 動作の便益(+17% throughput / +0.2ms p50)は手元の操作頻度では体感ゼロ・**負荷試験は
-   release（opt-3）／ 本番デプロイ相当を測るなら release-max（opt-3 + LTO + cgu=1, [`build-speed.md` ⑥](./build-speed.md)）でやるので不要**。dev profile の評価軸は反復速度のみ・動作速度は release / release-max が担保する、と
-   profile の役割を明確に分けた。`codegen-backend` は自前も依存も `cranelift` に統一（追加検証で依存も
-   cranelift に切り替えた・wall 差 ±0.2s = 誤差、fallback warning 無し）。実測根拠は [`build-speed.md`](./build-speed.md) ⑤。
+1. **dev profile は全クレート opt-level=0（フルビルドを最小化）** — `[profile.dev]` 自前=0 /
+   `[profile.dev.package."*"]` 依存も=0、`codegen-backend` も両方 `cranelift` に統一。
+   以前の「依存だけ opt-level=3」（dev でも実行を速くしたい狙い）は**実測で撤回**した ── フルビルド -45%
+   を取り、dev の動作速度は捨てる。**dev profile の評価軸は反復速度のみ・動作速度は release / release-max が担保する**、
+   と profile の役割を分けた。判断は [`decisions/0003`](./decisions/0003-dev-profile-opt-level.md)、
+   数字は [`build-speed.md` ⑤](./build-speed.md)、release-max（opt-3 + LTO + cgu=1）は [`build-speed.md` ⑥](./build-speed.md)。
 2. **開発時は Rust nightly を使う**（`rust-toolchain.toml` で固定。本番は stable）。nightly 限定の高速化を **2つ** opt-in:
 
    | 機能                                       | 何をする                                                                 | 効くシナリオ                                                       |
@@ -39,18 +36,19 @@ lastshot で採った高速化施策の一覧。実測根拠と「効かなか�
    | **`codegen-backend = "cranelift"`**        | rustc の **コード生成段** を LLVM より高速化（自前も依存も cranelift に統一） | codegen が支配項になる構成（自前クレートが大きい構成。dev は全クレート opt-level=0 なのでフロント律速だが、それでも保険として残す） |
    | **`-Z threads=8`**（並列フロントエンド）    | 1クレート内の rustc 処理（型チェック・マクロ展開・codegen）をスレッド分割 | 1クレートが巨大化したフルビルド（**実証済み: 約2倍速くなる**）       |
 
-   どちらも **lastshot 規模では warm では実測差ほぼゼロ**（自前クレートが小さく、並列化・codegen 短縮の余地が無いため。
-   **warm sccache で nightly フル構成 ~6.05s / stable + 素のツール ~5.77s（5 試行 median）── むしろ stable+plain が
-   わずかに速い**, **true cold sccache では nightly が -17% 速い**（A 10.58s vs B 12.79s ── `-Z threads=8` が dep
-   フルビルドで効く、ただし普段のループには乗らない節目だけの差）── 裏取り実測は [`build-speed.md` ⑦](./build-speed.md)）。
-   **追加裏取り (`CARGO_INCREMENTAL=0` + 差分ビルド)**: 差分ビルド（`touch 1 feature → cargo build -p app`、
-   5 試行 median）では **nightly+full 0.78s / stable+plain 0.63s で stable のほうが -0.15s (-19%) 速い**
-   ── small クレート 1 個の再コンパイル + link では `-Z threads=8` が効かず、cranelift も opt=0 では LLVM
-   fast path と差が出ない一方、cranelift 出力の link がわずかに重い可能性。**nightly チューニングの旨味は
-   cold (節目) に集中**し、hot loop では微弱に逆、という非対称が出ている。
-   今は warm/incr では効かないが、**大きいプロジェクトに育てば効くはず**の **保険として残す**: `-Z threads` の方は「巨大1クレートでフルビルド約2倍」が
-   `build-speed.md` ③ で実証済み、Cranelift の方は理屈上 codegen 支配な構成で効くはずだが lastshot では
-   まだ盤面が来ていない。
+   どちらも **lastshot 規模では効かない**（自前クレートが小さく、並列化・codegen 短縮の余地が無いため）。
+   効き方は場面で非対称で、**旨味は true cold（節目）に集中し、日常の warm / 差分ビルドではむしろ微弱に逆**:
+
+   | 場面 | nightly フル構成 | stable + 素のツール | 差 |
+   |---|---|---|---|
+   | true cold フルビルド | 10.58s | 12.79s | **nightly -17%** |
+   | warm フルビルド（普段） | 6.05s | 5.77s | stable -5%（誤差圏） |
+   | 差分ビルド（hot loop） | 0.78s | 0.63s | **stable -19%** |
+
+   （5 試行 median。裏取りの全数値と理由は [`build-speed.md` ⑦](./build-speed.md)）
+   それでも **保険として残す**: `-Z threads` は「巨大1クレートのフルビルドが約2倍速い」が
+   [`build-speed.md` ③](./build-speed.md) で実証済みで、クレートが育てば勝手に効き始める。Cranelift は
+   理屈上 codegen 支配な構成で効くが、lastshot ではまだ盤面が来ていない。
 
    **本番ビルドは stable で**やる: `./run release` と Dockerfile が `RUSTUP_TOOLCHAIN=stable` +
    `assets/strip-nightly.sh` で nightly 専用行（`cargo-features` / `codegen-backend`）を剥がす。**dev=nightly / 本番=stable** が掟。
@@ -59,22 +57,18 @@ lastshot で採った高速化施策の一覧。実測根拠と「効かなか�
 3. **lld（macOS）／ mold（Linux）でリンク高速化** — `.cargo/config.toml` の target rustflags で配線。
    ただし「もっと速いリンカ」が更に効くわけではない（lld ≈ apple-ld）。詳細は [`cold-start.md` §③](./cold-start.md)。
 4. **sccache で重い依存をキャッシュ** — 依存（axum / tokio / buffa…）をキャッシュから返して
-   `cargo clean` / 新規 checkout / deps が変わるブランチ切替を短縮。**新構成（全 opt-0）で再計測済み**
-   ([`build-speed.md`](./build-speed.md) ④ 末尾): 旨味は当時より小さく、30 クレート規模でフル再ビルド -13%、
-   90 クレート規模では **incr ON が baseline より遅くなる**（+14%、依存=opt0 で軽くなった分を sccache 往復が食う）。
-   **`CARGO_INCREMENTAL=0` まで切るとフル再ビルドが規模に関わらず -40〜52% で、CI / worktree 切替多用 / `cargo clean`
-   多用 / 共有キャッシュ運用など「フル再ビルドが多い環境」では旨みが大きい**（代償は日常ループの税 check +0.1〜0.2s /
-   build +0.2〜0.5s、規模で増える ── が、その環境ならフル再ビルドの節約で取り返せる）。lastshot 規模で増分ループ
-   中心の場合は局所的に少し速くなる/遅くなるの誤差圏。
-
+   `cargo clean` / 新規 checkout / deps が変わるブランチ切替を短縮。ただし**新構成（全 opt-0）では旨味は当時より小さい**
+   ── 依存自体が軽くなったので、30 クレート規模でフル再ビルド -13%、90 クレート規模では **incr ON がむしろ遅くなる**
+   （+14%）。**フル再ビルドが多い環境（CI / worktree 切替多用 / 共有キャッシュ）なら `CARGO_INCREMENTAL=0` 込みで -40〜52%**。
+   規模と場面で符号が変わる設定なので、採否は実測してから決める（[`build-speed.md` ④](./build-speed.md) 末尾）。
 5. **incremental は既定 ON のまま** — 差分ビルドの本体は `incremental`（`CARGO_INCREMENTAL=0` にしない）。
-   sccache とは別レイヤなので併用する。
+   sccache とは別レイヤなので併用する。lastshot は warm が支配的なのでこの既定が正解（同 ⑦(i)）。
 
 ## 3. 採らなかったもの（効かないと実測で確認）
 
-- **ホットパッチ（subsecond / dioxus）** — 関数本体しか差し替えられず、構造変更（フィールド追加・シグネチャ変更・
-  スキーマ変更）で結局フルビルドに戻る。AI 高速開発の「黙ってフォールバック」は事故のもと。
-  詳細は [`cold-start.md`](./cold-start.md) ホットパッチ節。
+- **ホットパッチ（subsecond / dioxus）** — そもそも axum 素組では動かず、関数本体しか差し替えられない。
+  構造変更（フィールド追加・シグネチャ変更・スキーマ変更）で結局フルビルドに戻る。
+  判断は [`decisions/0001`](./decisions/0001-subsecond-hotpatch.md)。
 - **systemfd で速さを稼ぐ** — 速さは変わらない、接続断を消すだけ。しかも現状の `bacon.toml` 配置では
   接続断も消えていない。詳細は [`cold-start.md` §②](./cold-start.md)。
 - **`-Z threads=N` の N を増やす** — 15コア機でも N=12,16 は逆に悪化（cargo のクレート並列とオーバーサブスクライブ）。

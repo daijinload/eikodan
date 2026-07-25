@@ -26,49 +26,19 @@
 | └ サーバ cold start（exec → `"listening"`） | ~0.285s                    | macOS 初回起動セキュリティ検証（下記）    |
 | └ 残り                                      | ブラウザ側の再接続・再描画 |                                           |
 
-### 参考: フルビルドの実測（3 構成 × sccache true cold/warm）
-
-`cargo build [--release] -p app` を 3 構成 × true cold/warm で計測（lastshot, 2026-06-15、各構成 1 cold + 4 warm
-= 5 試行、warm は median、**構成ごとに sccache を全消ししてから測定**＝順序効果排除）。"stable + 素のツール" =
-`RUSTUP_TOOLCHAIN=stable RUSTFLAGS=""` で nightly rustflag(`-Z threads`/lld) を無効化 + `strip-nightly.sh` で
-`cargo-features` / `codegen-backend` 行を剥がす（Docker と同条件）:
-
-| 構成                                                                   | true cold (sccache 空)  | warm (sccache hit、普段の体感、4 試行 median + spread) |
-| ---------------------------------------------------------------------- | ----------------------- | ----------------------------------------------------- |
-| **dev** (nightly + cranelift + `-Z threads=8` + lld + sccache + opt-0) | **~10.6s**              | **~6.05s** (spread 0.55s)                             |
-| **dev** (stable + `RUSTFLAGS=""` + sccache + opt-0、素のツール)        | **~12.8s**              | **~5.77s** (spread 0.22s)                             |
-| **release** (stable + `RUSTFLAGS=""` + sccache + opt-3)                | **~20.1s**              | **~6.30s** (spread 0.16s)                             |
-
-読み方:
-- **warm（普段の体感）= 約 5.8〜6.3s** ── 重い依存の opt-3 LLVM 仕事を sccache が返すので、自前クレートの
-  仕事しか残らない。dev opt-0 (~5.8〜6.0s) と release opt-3 (~6.3s) の差は 0.5s 程度で、hot loop の意思決定に
-  影響しないレベル（**`./run release` の体感が dev とほぼ変わらない**＝節目で本番相当を気楽に確認できる）。
-  dev nightly+full vs dev stable+plain は ±5%（A 6.05 vs B 5.77）で**むしろ stable+plain がわずかに速い**＝
-  ノイズ圏、lastshot 規模では nightly チューニングは warm に乗らない。
-- **true cold（sccache 空）= 10〜20s で構成依存が大きい** ── 新規 clone / sccache パージ / worktree 新規追加 /
-  別 toolchain で初めて焼く / 大きい deps 更新で当たる:
-  - **dev nightly+full** が cold で最速 (~10.6s) ── `-Z threads=8` の並列フロントが dep フルビルドで効く
-    （vs dev stable+plain ~12.8s で **-17%**）。普段のループには乗らない差だが、新規 clone / worktree 初回 /
-    toolchain 切替直後の最初の 1 ビルドだけは気持ちいい。
-  - **release** は cold で重い (~20.1s) ── opt-3 LLVM の本気仕事を sccache が返せない状態だと dev opt-0 の
-    +57%。「sccache 世代交代直後の `./run release`」だけは意外と待つことを覚えておくと事故を避けられる
-    （普段は warm で 6.3s で済む）。
-- **「`cargo clean` 後 = 常に 13〜15s」と読むのは間違い** ── sccache キャッシュキーが世代交代したかで意味が
-  変わる。普段はほぼ warm に収まる。日常で「`cargo clean` 直後」を踏んでも sccache が他作業のエントリを
-  持っていれば実体は cold ではなく半 warm。
-- **差分ビルド (hot loop) は別軸** ── `touch 1 feature → cargo build -p app` の差分ビルドでは
-  `CARGO_INCREMENTAL=0` 下で **dev nightly+full 0.78s / dev stable+plain 0.63s（5 試行 median、stable が
-  -0.15s/-19%）**。nightly チューニング（cranelift / -Z threads / lld）は **cold 局面に旨味が集中**し、
-  hot loop には微弱に逆効果という非対称が出ている。詳細は [`build-speed.md` ⑦](./build-speed.md)。
-- 詳細な分解（cranelift / -Z threads / lld 個別の効きや sccache warm 同士の差の理由、incr=OFF + 差分ビルド
-  の追加計測）は [`build-speed.md` ⑦](./build-speed.md)。
-
-### 参考: 増分・no-op の実測（フルビルドとの対比）
+### 参考: 増分・no-op の実測
 
 | シナリオ                                          | 時間  | 備考                                          |
 | ------------------------------------------------- | ----- | --------------------------------------------- |
 | **増分ビルド**（`app/main.rs` を1ファイル touch） | ~0.6s | 上の表の「ビルド 0.74s」と同区間（ばらつきあり） |
 | **no-op**（変更なしで `cargo build`）             | ~0.1s | cargo のフィンガープリント検査だけ              |
+
+### 参考: フルビルドとの関係（数字と分解は [`build-speed.md` ⑦](./build-speed.md)）
+
+- **warm sccache（普段の体感）= 約 5.8〜6.3s**（dev opt-0 / release opt-3 / nightly / stable のどれでもこの帯に収まる）。
+- **true cold（sccache 空・節目だけ）= 10〜20s** で構成差が大きい（dev nightly ~10.6s / dev stable ~12.8s / release ~20.1s）。
+- **「`cargo clean` 後 = 常に十数秒」と読むのは間違い**。分かれ目は sccache のキャッシュキーが世代交代したか
+  （新規 clone / sccache パージ / 別 toolchain で初めて焼く / 大きい deps 更新）で、普段はほぼ warm に収まる。
 
 **ポイント**: 日常の dev ループは増分ビルド側（~0.6〜0.7s）で回るので、約1秒の底もそちらの話。フルビルドが
 warm 6s に収まる事実は「節目で動作確認するときに気楽に待てる」上乗せであって、増分・check（package by feature）の
@@ -113,8 +83,9 @@ hot loop の主役交代ではない（package by feature の効きは [`build-s
 | systemfd を最外で常駐させ内側のアプリだけ差し替え                                                | **0**                |
 
 - 理由: `kill_then_restart` は**ジョブのプロセスツリー丸ごと（systemfd 含む）を殺す** → ソケットも一緒に閉じる。
-- ⚠️ **現状の `bacon.toml` / 旧 `README` の「ソケットを引き継いで再起動（接続が切れない）」は、この配置では成立しない。**
-  効かせるには systemfd を bacon の**外側**に常駐させ、内側で app だけを再起動する必要がある（例: `systemfd --no-pid -s http::3000 -- bacon -j run`）。
+- ⚠️ **`bacon.toml` の `[jobs.serve]` に期待される「ソケットを引き継いで再起動（接続が切れない）」は、この配置では成立しない**
+  （この実測を受けて `bacon.toml` 側にも注記済み）。効かせるには systemfd を bacon の**外側**に常駐させ、
+  内側で app だけを再起動する必要がある（例: `systemfd --no-pid -s http::3000 -- bacon -j run`）。
 - 価値は速さではなく「**再起動中にブラウザへ接続拒否が点滅しない（livereload がコケない）**」こと。
 
 ### ③ 速いリンカ / ビルド側 → ✗ レバーにならない
@@ -124,7 +95,7 @@ hot loop の主役交代ではない（package by feature の効きは [`build-s
 
 ### ④ 並列フロントエンド `-Z threads=N` の最適値 → ✗ レバーにならない（8で十分／むしろ大は悪化）
 
-**問い**: 15コア機（Apple Silicon M4 Max 相当、perf 5 + eff 10）なら `threads=8` より大きくしたら速くなるのか。
+**問い**: 15コア機（Apple M5 Pro、perf 5 + eff 10）なら `threads=8` より大きくしたら速くなるのか。
 **答え**: ならない。incremental は完全フラット、full rebuild は **12,16 で逆に悪化**する。
 
 `crates/app/src/main.rs` を毎回マーカー追記して `cargo build -p app` を 3 試行ずつ、`RUSTFLAGS` で `threads=N` を振った実測:
@@ -211,64 +182,19 @@ Cranelift は **rustc パイプラインの最終段（コード生成: LLVM IR 
 
 `-Z threads=8` と全く同じ位置づけ — **「今は効かないが、伸び代の保険」**。
 
-### ⑥ dev profile を全クレート opt-level=0 に統一 → 反復速度に全振り（旧: 依存=3 の非対称を撤回）
+### ⑥ dev profile は全クレート opt-level=0（前提の確認）
 
-dev ループの評価軸は**反復速度**だけ・本番動作速度は `[profile.release]`（opt-3）と必要なら `release-max`（opt-3 + LTO + cgu=1）が担保する、と profile の役割を明確に分ける。実測根拠は [`build-speed.md` ⑥](./build-speed.md)。
+本書の①〜⑤は「dev profile は自前も依存も opt-level=0」を前提にしている。以前は**依存だけ opt-level=3**
+で焼いていたが、実測（フルビルド -45%）で撤回した ── 判断は
+[`decisions/0003-dev-profile-opt-level.md`](./decisions/0003-dev-profile-opt-level.md)、数字は
+[`build-speed.md` ⑤](./build-speed.md)。ここでは**他の § への波及だけ**押さえておく:
 
-**配線**: `Cargo.toml` の `[profile.dev]` を自前も依存も opt-level=0 にする:
-
-```toml
-[profile.dev]
-opt-level = 0                          # 自前 = 毎回再コンパイル → コンパイル時間最短
-codegen-backend = "cranelift"
-
-[profile.dev.package."*"]
-opt-level = 0                          # 依存 = フルビルドのコストを最小化
-codegen-backend = "cranelift"          # 依存も Cranelift で統一（実測で差なし。詳細は §⑤）
-```
-
-#### 経緯: 「dev でも実行を速く」狙いの opt 非対称（自前=0 / 依存=3）を試して撤回した
-
-当初は **dev ループで実行時間も稼ぐ** 設計を入れていた:
-
-|              | 編集ごと            | コンパイル時間の重さ | 実行時の影響           |
-| ------------ | ------------------- | -------------------- | ---------------------- |
-| 自前コード   | **毎回再コンパイル** | 毎回払う             | 規模小さく支配的でない |
-| 依存クレート | 一度ビルドして固定  | 初回1回のみ          | dev ループ中ずっと響く |
-
-→ 自前=opt=0 / 依存=opt=3 で「毎回払う側は軽く、一度きりの側を重く」というコスト構造を狙う。理屈は綺麗だが
-実測してコスト/便益を確かめた:
-
-| 設定 | フルビルド (wall) | rustc 合計 CPU | dev binary GET / req/sec | p50 |
-|---|---|---|---|---|
-| 自前=0 / 依存=3（旧） | 24.02s | 249.7s | 47,874 | 1.03ms |
-| **自前=0 / 依存=0（採用）** | **13.18s** | 59.6s | 39,685 | 1.25ms |
-| 差分 | **-10.8s (-45%)** | -76% | -17% | +0.22ms |
-
-(lastshot, dev profile, `cargo clean` + `RUSTC_WRAPPER=` で sccache 無効化, oha -c 50 -z 15s。
-詳細は [`build-speed.md` ⑤](./build-speed.md))
-
-**撤回した理由**:
-- 「初回のみのコスト」の前提が**半分しか正しくない**。`target/` が残っている間は確かに無料だが、
-  `cargo clean` / 新規 checkout / deps が変わるブランチ切替の節目で **+約11秒 (+45%) を毎回払い直す**。
-- 動作便益(+17% throughput / +0.2ms p50)は手元の操作頻度では**体感ゼロ**。そもそも **dev で負荷試験はやらない**
-  ── 本番速度を見たければ `cargo build --release`（opt-3）か、本番デプロイ相当を測るなら `cargo build --profile release-max`（opt-3 + LTO + cgu=1）で別 profile を焼くのが筋。dev profile で
-  動作速度を取りに行こうとしていたこと自体が **profile の役割の混同**だった。
-
-#### 他の §との関係（撤回後）
-
-- **§④ `-Z threads`**: 「自前 opt=0 で codegen は軽い、フロントが支配項」の前提は変わらず（自前は元々 opt=0）。
-  むしろ依存も opt=0 になって codegen 比率がさらに下がるので、`-Z threads` の効きは小規模構成では引き続きほぼゼロ。
-- **§⑤ Cranelift**: 「opt=0 では LLVM が fast path」は引き続き有効。`[profile.dev.package."*"]` の codegen-backend は
-  追加検証で `cranelift` に統一（wall ±0.2s = 誤差・fallback warning 無し、自前と揃える＝カーブアウトを置かない方を選んだ）。
-  依存が opt=0 になったぶん codegen の絶対量はさらに小さい。
-- **sccache**: 「重い依存をキャッシュから返す」効果は依然あるが、依存ビルド自体が opt=0 で元より軽いので
-  **当時の数値ほど劇的ではない**（[`build-speed.md` ④](./build-speed.md) 末尾「新構成（全 opt-0）での再計測」）。
-  実測: 30 クレートのフル再ビルドで `incr ON` -13% / `incr OFF` -52%、90 クレートでは `incr ON` が +14% で **悪化**（依存節約を
-  sccache 往復が食い潰す）/ `incr OFF` -39%。日常ループは `incr ON` が baseline と誤差、`incr OFF` は税
-  （check +0.1〜0.2s、build +0.2〜0.5s）。**`incr OFF` はフル再ビルドが多い環境（CI / worktree 切替多用 / `cargo clean`
-  多用 / 共有キャッシュ）で旨みが大きい**（規模に関わらず -40〜52% で、税はその環境ならフル再ビルドの節約で取り返せる）。
-  lastshot 規模で増分ループ中心の場合は局所的・最大の旨味は CI/共有キャッシュ側。
+- **§④ `-Z threads`**: 「フロント（型チェック・マクロ展開）が支配項」の前提は変わらない。依存も opt=0 に
+  なって codegen 比率がさらに下がったので、小規模構成では効きは引き続きほぼゼロ。
+- **§⑤ Cranelift**: 「opt=0 では LLVM が fast path」も有効。`[profile.dev.package."*"]` の `codegen-backend` は
+  追加検証で `cranelift` に統一した（wall ±0.2s = 誤差・fallback warning 無し。自前と揃えてカーブアウトを置かない）。
+- **sccache**: 依存ビルド自体が opt=0 で軽くなったぶん、「重い依存をキャッシュから返す」旨味は当時より小さい
+  （[`build-speed.md` ④](./build-speed.md) 末尾「新構成（全 opt-0）での再計測」）。
 
 ## ホットパッチ（subsecond / dioxus）を採らない理由
 
@@ -280,7 +206,9 @@ codegen-backend = "cranelift"          # 依存も Cranelift で統一（実測�
   スキーマファースト故に**構造変更に寄りがち** → hot-patch が効くのは「service 層の関数本体だけいじる」薄いスライスのみ。
 - **AI 高速開発と相性が悪い**: 当てられない時に黙ってフォールバック/部分更新する曖昧さは事故のもと。
   clean に再起動して fail-fast にするほうが安全（lazy DB 接続を避けるのと同じ判断）。
-- [`README.md`](../README.md) の除外方針（subsecond は axum 素組に非対応＝Dioxus 移行が要る）とも整合。
+- そもそも **axum 素組では動かない**（subsecond クレート単体に CLI ランナーとの接続実装が無く、使うには
+  Dioxus への移行が要る）。検証の全文・制約一覧は
+  [`decisions/0001-subsecond-hotpatch.md`](./decisions/0001-subsecond-hotpatch.md)。
 
 ## 推奨アクション
 

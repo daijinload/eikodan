@@ -296,7 +296,7 @@ between 0-3, s or z` で cargo がパース時点で拒否する。gcc の `-O9`
 
 ## ⑦ フルビルド速度の正体（sccache warm/cold × dev/release × nightly/stable）
 
-①〜③ で dev profile を全クレート opt-0 に統一し、⑥ で release-max を整えた段階で、改めて
+⑤ で dev profile を全クレート opt-0 に統一し、⑥ で release-max を整えた段階で、改めて
 **「現状のフルビルドは結局いくら？」**を分解して測った。意思決定の場面は 3 つの軸で変わる:
 
 1. **sccache の状態**: warm（普段のループ。前回ビルドのキャッシュが残ってる）vs cold
@@ -474,9 +474,9 @@ lastshot は warm が支配的なので **incr ON が既定（変更なし）**�
   別 toolchain で初めて焼く / 大きい deps 更新で cold に当たる。それ以外は warm。
 - 過去の同節は sccache を purge せずに「他構成の残骸が hit する状態」を cold と呼んでいたので、構成本来の
   cold 差が見えていなかった。今回 sccache を毎回 purge する正攻法で取り直して数字を全面更新した。
-- ① の「フルビルド -45% (24s → 13s)」は **sccache を意図的に切って測った数字**（RUSTC_WRAPPER= 無効化）。
+- ⑤ の「フルビルド -45% (24s → 13s)」は **sccache を意図的に切って測った数字**（RUSTC_WRAPPER= 無効化）。
   sccache 有効の warm では旧構成も新構成も差は -10〜20% に縮む（重い deps を sccache が返すと opt-3/opt-0
-  の差自体が支配項でなくなるため）。** ① の改善が無意味になったわけではない**: sccache 無効・新規 clone・
+  の差自体が支配項でなくなるため）。**⑤ の改善が無意味になったわけではない**: sccache 無効・新規 clone・
   CI で焼く時間が短くなる効果は別途残る。
 
 ## 結論
@@ -484,4 +484,4 @@ lastshot は warm が支配的なので **incr ON が既定（変更なし）**�
 - **大多数のプロジェクト規模では、編集ループは1秒未満**。1秒を超えるのは「起動して動作確認する瞬間(build)」だけで、それも自前5万行(機能90個)級から。
 - **この構成は今すぐ nightly を外してもビルド速度はほぼ落ちない**（安定版入りを待つ必要なし）。stableに倒すなら `Cargo.toml` の `cargo-features=["codegen-backend"]`＋`codegen-backend` 行と、`.cargo/config.toml` の `-Z threads=8` を外す。
 - ただし1クレートを肥大化(モノリス化)させると `-Zthreads` がフルビルドを約2倍速くする（craneliftは無関係・③参照）。ただし増分ループは救わないので本筋は分割。**nightlyは「葉クレートの規律を破ったときの、フルビルド用の保険」**。
-- **sccacheは現状入れていない（fastweb 側 ＝ lastshot 側は `.cargo/config.toml` に `rustc-wrapper = "sccache"` 入り）**。入れるなら `RUSTC_WRAPPER=sccache` だけ・incrementalは残す（④）が、**新構成（全 opt-0）では旨味は当時より小さい**: 30 クレートでフル再ビルド -13%、90 クレートでは **incr ON が baseline よりむしろ遅くなる**（+14%・依存節約を sccache 往復が食う）。**`CARGO_INCREMENTAL=0` まで切ればフル再ビルドは規模に関わらず -40〜52% 速くなり、CI / worktree 切替多用 / `cargo clean` 多用 / 共有キャッシュなど「フル再ビルドが多い環境」では旨みが大きい**（代償の日常ループ税は、その環境では取り返せる）。手元の増分中心ループでは規模次第なので一度測ってから決める。
+- **sccache は入れている**（`.cargo/config.toml` の `rustc-wrapper = "sccache"`。`incremental` は既定 ON のまま＝④の推奨構成）が、**新構成（全 opt-0）では旨味は当時より小さい**: 30 クレートでフル再ビルド -13%、90 クレートでは **incr ON が baseline よりむしろ遅くなる**（+14%・依存節約を sccache 往復が食う）。**`CARGO_INCREMENTAL=0` まで切ればフル再ビルドは規模に関わらず -40〜52% 速くなり、CI / worktree 切替多用 / `cargo clean` 多用 / 共有キャッシュなど「フル再ビルドが多い環境」では旨みが大きい**（代償の日常ループ税は、その環境では取り返せる）。手元の増分中心ループでは規模次第なので一度測ってから決める。
