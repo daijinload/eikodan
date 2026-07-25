@@ -14,6 +14,7 @@
 | proto            | `crates/schema/proto/counter.proto`             | **buf format**             | **buf lint**         | [`../crates/schema/proto/buf.yaml`](../crates/schema/proto/buf.yaml) |
 | shell            | `run` / `assets/*.sh` / `lint/*.sh`             | **shfmt**（`-i 2 -ci`）    | **shellcheck**       | （フラグのみ）                                                       |
 | SQL              | `migrations/*.sql`                              | **sqlfluff**               | **sqlfluff**         | [`.sqlfluff`](.sqlfluff)                                             |
+| テスト配置       | `crates/*/src` / `*/tests/spec_*`               | —                          | **自前スクリプト**   | [`check-spec-pairs.sh`](check-spec-pairs.sh)                         |
 
 > JS/TS の linter（Oxlint/Biome）は入れない。Rust 中心の構成では空振りになるため、品質担保の中心は
 > **型チェック + clippy**（showcase の結論）。`browser/`（Playwright）は自己完結の別関心事なので oxfmt の対象外。
@@ -32,6 +33,7 @@
 ```sh
 ./run lint-setup   # ツール取得（初回。oxfmt を lint/.lint-tools にローカル固定、不足分は brew）
 ./run lint         # 全種別を通しゲート（読み取り専用。1つでも落ちたら非ゼロ終了 = CI 兼用）
+./run spec-check   # テスト配置規約だけを単独で検査（追加ツール不要・一瞬。lint の [7/7] と同じ）
 ```
 
 `./run lint` は **push 前に節目で手動**で回す（`./run css-check` と同じ運用。pre-commit は使わない）。

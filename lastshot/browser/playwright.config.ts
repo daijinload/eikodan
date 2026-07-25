@@ -9,6 +9,10 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './tests',
+  // 既定の `*.spec.ts` ではなく Rust 側と同じ `spec_<name>` プレフィックスで拾う
+  // （仕様テストは必ず `spec_<name>.md` とペア ── ../docs/testing.md §3）。
+  // これを外れた .ts は**黙って実行されない**ので、lint/check-spec-pairs.sh [4/4] が弾く。
+  testMatch: '**/spec_*.ts',
   // 共有カウンタ（counter テーブル 1 行）を増やすので、ファイル間も直列にして取り違えを防ぐ。
   fullyParallel: false,
   // CI で test.only が残っていたら失敗させる

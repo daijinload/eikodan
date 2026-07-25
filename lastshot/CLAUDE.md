@@ -60,6 +60,31 @@
   `./run db-reset` で作り直し、compose はボリューム無し）。既存DBに後付けで Flyway を入れる場合は履歴が
   無く既存テーブルと衝突するので、一度 `./run db-reset` してまっさらにしてから流す。
 
+## テストの掟（仕様とテストのペア配置 ── 理由は [`docs/testing.md`](./docs/testing.md)）
+
+- **`src/` にテストコードを一切書かない。** `#[cfg(test)] mod tests` も doctest も禁止。実装とテストが
+  同じ diff に並ぶのを構造的に排除する（人間のレビュー面は実装ではなく仕様に置く、という前提）。
+  テストは必ず `crates/<crate>/tests/` `tests-http/tests/` `browser/tests/` に置く。`./run spec-check` が機械的に検査する。
+- **ファイル名のプレフィックスで役割を分ける。**
+  - `spec_<name>.rs` … **仕様テスト**（API レベルの契約）。**必ず隣に `spec_<name>.md` を置く**。
+    機能追加・修正では必須。**md が契約の正本で、期待値を変えるときは先に md を変える。**
+  - `unit_<name>.rs` … 純粋ロジックのユニット。md 不要。**人間が必要と判断したものだけ書く**
+    （実装をなぞるだけのテストは書かない。エージェントが勝手に増やさない）。
+  - `_db` で終わる名前 … 生きた Postgres が要る印。**現在 0 本**（外した理由と戻し方は `docs/testing.md` §7）。
+    足すときは `./run` の除外フィルタと `test-db` をセットで戻す ── **片方だけだと nextest が exit 94 で落ちる。**
+  - **ブラウザ層（Playwright）も同じ規約**: `browser/tests/spec_<name>.ts` + `spec_<name>.md` のペア。
+    Playwright 既定の `*.spec.ts` は使わず `testMatch` を `spec_*.ts` に絞ってある ── **プレフィックスを
+    外すと黙って実行されない**ので、`spec-check` の [4/4] が弾く。ここに `unit_` は置かない。
+- **仕様 md には「この層は何をテストしているのか / 用語 / 前提条件 / ID 付きの契約と境界値」を書く。**
+  冒頭に**担当範囲**を書き、「検証しないこと」とその担当（どの層・どのファイルが持つか）を対で示す
+  ── 層をまたいだ重複と層の取り違えを md のレビューで捕まえるため。用語は `.proto` を正典とし、
+  proto に現れない語だけ md で定義する（用語集を二重に持たない。他層の md で定義済みの語は参照して再定義しない）。
+  契約 ID は層ごとに接頭辞を分け（HTTP=`C-*` / ブラウザ=`B-*`）、テストの doc コメントから参照する。
+- **テスト用の外部クレートを気軽に足さない。** Rust はハーネスが標準内蔵。`insta`（スナップショット）と
+  `mockall` は方針と矛盾するので**入れない**（[`docs/decisions/README.md`](./docs/decisions/README.md) #16/#17）。
+- **テストのために本番コードのシグネチャを変えない。** 必要になったら人間が判断する
+  （DB テストの隔離が該当。API レベルの契約は単調増加で検証する ── `docs/testing.md` §7）。
+
 ## クレート依存の向き（package by feature + schema + db）
 
 - `schema` は土台。**全クレートが共有する**（依存は buffa/connectrpc/serde のみ）。
@@ -97,7 +122,8 @@
 ## イテレーションの回し方
 
 - 確認は **`cargo check -p <feature>`**（+ `cargo clippy -p <feature>`）。フルビルドを待たない。`./run watch`（bacon）前提。
-- テストは触っているクレートの単体のみ（`cargo nextest run -p <feature>`）。HTTP越しの統合は `tests-http/`（ワークスペース外）で節目に。
+- テストは触っているクレートの単体のみ（`cargo nextest run -p <feature>`）。節目に `./run test-unit`（DB不要・数秒）、
+  HTTP越しの仕様テストは `./run test-http`（`tests-http/` はワークスペース外・要 `./run dev`）。
 - **push前のCSSゲート**: `./run css-check`（クリーンビルドでパージ確定 + semgrep）。pre-commit は使わず節目に手動で回す。
 
 ## このリポの作法

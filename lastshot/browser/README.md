@@ -7,7 +7,14 @@ lastshot の核（**スキーマ＝単一の真実**）を実ブラウザで検�
 3. Connect API（`GetCount` / `Increment`）の JSON
 
 の3経路に流れる。データ取得は1回・出口は複数なので3つは常に一致するはず ── それを
-**実ブラウザ + 実 HTMX swap + 実 API** で突き合わせるのがこのテスト（`tests/counter.spec.ts`）。
+**実ブラウザ + 実 HTMX swap + 実 API** で突き合わせるのがこのテスト。
+
+**契約の正本は [`tests/spec_counter.md`](./tests/spec_counter.md)**、`tests/spec_counter.ts` はその実行可能な形
+（この層が何を検証し、何を検証しないかも md にある）。**期待値を変えるときは先に md を変えること。**
+配置規約の全体像は [`../docs/testing.md`](../docs/testing.md)、機械チェックは `./run spec-check`。
+
+> ファイル名は Playwright 既定の `*.spec.ts` ではなく **`spec_<name>.ts`**（Rust 側と同じプレフィックス）。
+> `playwright.config.ts` の `testMatch` で拾っているので、**この形を外した `.ts` は実行されない**。
 
 採否の判断は [`../docs/decisions/0002-playwright-mcp.md`](../docs/decisions/0002-playwright-mcp.md)（Playwright 採用・MCP 不採用）。
 AI からの探索的操作は agent-browser に役割分担し、**安定した回帰テストは Playwright 本体**で書く方針。

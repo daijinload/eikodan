@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # lastshot の fmt/lint 手動ゲート（読み取り専用。書き込みはしない）。
 # push 前に節目で回す想定（css-check と同じ運用。pre-commit は使わない）。
-# 種別ごとに最適なツールを当てる（1本で全部は賄えない。根拠は ../../lint-format/）:
+# 種別ごとに最適なツールを当てる（1本で全部は賄えない。根拠は ../docs/lint-format.md）:
 #   1) rustfmt   cargo fmt --all --check                   （../rustfmt.toml / workspace 全体）
 #   2) clippy    cargo clippy --all-targets -- -D warnings  （workspace 全体）
 #   3) oxfmt     TOML/YAML/MD/CSS/HTML/JSON の整形チェック  （./.oxfmtrc.json / repo 全体・.gitignore 尊重）
 #   4) buf       proto の lint + format チェック            （../crates/schema/proto, buf.yaml）
 #   5) shell     shfmt -i 2 -ci -d + shellcheck            （run, assets/*.sh, lint/*.sh）
 #   6) sql       sqlfluff lint                             （./.sqlfluff / postgres, migrations/*.sql）
+#   7) テスト配置 check-spec-pairs.sh                       （src にテスト無し / spec_*.md ⇔ spec_*.{rs,ts}）
 #
 # 使い方:  ./run lint   （= bash lint/check.sh。どこから叩いてもよい）
 # 整形（書き込み）の対は lint/fmt.sh（= ./run fmt）。使い分け:
@@ -27,13 +28,13 @@ step() {
   echo "==> $*"
 }
 
-step "[1/6] rustfmt（cargo fmt --all --check）"
+step "[1/7] rustfmt（cargo fmt --all --check）"
 cargo fmt --all --check || fail=1
 
-step "[2/6] clippy（-D warnings）"
+step "[2/7] clippy（-D warnings）"
 cargo clippy --all-targets -- -D warnings || fail=1
 
-step "[3/6] oxfmt --check（TOML/YAML/MD/CSS/HTML/JSON・.gitignore 尊重）"
+step "[3/7] oxfmt --check（TOML/YAML/MD/CSS/HTML/JSON・.gitignore 尊重）"
 # browser/ は自己完結の別関心事（Playwright）なので対象外。'!' 除外は cwd 基準で効く
 # （.oxfmtrc.json の ignorePatterns は設定ファイルの場所基準になり root からだと外しにくい）。
 if [[ -n "$OXFMT" ]]; then
@@ -43,17 +44,21 @@ else
   fail=1
 fi
 
-step "[4/6] buf（lint + format）"
+step "[4/7] buf（lint + format）"
 (cd crates/schema/proto && buf lint && buf format --diff --exit-code) || fail=1
 
-step "[5/6] shell（shfmt -d + shellcheck）"
+step "[5/7] shell（shfmt -d + shellcheck）"
 # -i 2: 2スペース indent（shfmt 既定のタブにしない）。-ci: case 分岐も字下げ（既定の左寄せにしない）。
 shfmt -i 2 -ci -d run assets/*.sh "$LINT"/*.sh || fail=1
 shellcheck run assets/*.sh "$LINT"/*.sh || fail=1
 
-step "[6/6] sql（sqlfluff lint）"
+step "[6/7] sql（sqlfluff lint）"
 # lint は整形逸脱も含めて検査する（書き込みは sqlfluff fix）。
 sqlfluff lint --config "$LINT/.sqlfluff" migrations/*.sql || fail=1
+
+step "[7/7] テスト配置（src にテスト無し / spec_*.md と spec_*.{rs,ts} のペア）"
+# 追加ツール不要の自前スクリプト。規約と理由は ../docs/testing.md。
+bash "$LINT/check-spec-pairs.sh" || fail=1
 
 echo
 if [[ "$fail" -eq 0 ]]; then

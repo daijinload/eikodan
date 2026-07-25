@@ -34,16 +34,17 @@ eikodan の各サブプロジェクト（実験場）で試した結果のうち
 
 ## 設計・運用
 
-| ドキュメント                                   | 何が書いてあるか                                                                 |
-| ---------------------------------------------- | -------------------------------------------------------------------------------- |
-| [`htmx-vs-spa.md`](./htmx-vs-spa.md)           | HTMX を選んだ理由。SPA との比較・白フラッシュの正体・コード量                    |
-| [`directory-layout.md`](./directory-layout.md) | 設定ファイルの置き場所（ルート直下 vs フォルダ集約）。自動探索と喧嘩しない置き方 |
-| [`lint-format.md`](./lint-format.md)           | lint/format ツールの選定根拠（なぜ clippy 中心・Oxlint を入れないか）            |
-| [`task-runner.md`](./task-runner.md)           | タスクランナーの選定根拠（Make 代替 9 通りの比較。なぜ `./run` か）              |
-| [`ci-performance.md`](./ci-performance.md)     | CI 高速化の実測と採否（ARM runner / rust-cache / uv / alpine）                   |
-| [`container-ops.md`](./container-ops.md)       | CI・ローカルのコンテナ構成（単一 vs compose 分割、1コンテナ1プロセス論）         |
-| [`bash-setup.md`](./bash-setup.md)             | macOS で bash 5.x を使う（`./run` の前提）                                       |
-| [`naming.md`](./naming.md)                     | なぜ `lastshot` という名前か                                                     |
+| ドキュメント                                   | 何が書いてあるか                                                                                                         |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| [`testing.md`](./testing.md)                   | テストの配置規約（仕様 md とテストの同名ペア / `spec_` と `unit_` / 実装とテストを分離する理由）とテストライブラリの採否 |
+| [`htmx-vs-spa.md`](./htmx-vs-spa.md)           | HTMX を選んだ理由。SPA との比較・白フラッシュの正体・コード量                                                            |
+| [`directory-layout.md`](./directory-layout.md) | 設定ファイルの置き場所（ルート直下 vs フォルダ集約）。自動探索と喧嘩しない置き方                                         |
+| [`lint-format.md`](./lint-format.md)           | lint/format ツールの選定根拠（なぜ clippy 中心・Oxlint を入れないか）                                                    |
+| [`task-runner.md`](./task-runner.md)           | タスクランナーの選定根拠（Make 代替 9 通りの比較。なぜ `./run` か）                                                      |
+| [`ci-performance.md`](./ci-performance.md)     | CI 高速化の実測と採否（ARM runner / rust-cache / uv / alpine）                                                           |
+| [`container-ops.md`](./container-ops.md)       | CI・ローカルのコンテナ構成（単一 vs compose 分割、1コンテナ1プロセス論）                                                 |
+| [`bash-setup.md`](./bash-setup.md)             | macOS で bash 5.x を使う（`./run` の前提）                                                                               |
+| [`naming.md`](./naming.md)                     | なぜ `lastshot` という名前か                                                                                             |
 
 ## 他スタックとの比較ベンチ
 

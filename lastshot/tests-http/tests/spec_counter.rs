@@ -1,16 +1,16 @@
-//! 起動済みサーバーをHTTPで外から叩くブラックボックステスト。
+//! カウンター機能の**仕様テスト**。契約の正本は隣の [`spec_counter.md`]。
 //!
-//! 設計（fastweb 由来）:
+//! 各テストは md の契約 ID（C-1 / C-2 / C-3）に 1:1 で対応する。**期待値を変えるときは
+//! 先に md を変える** ── md が動かずここだけ動く diff は「バグ修正でテストを黙らせた」
+//! 典型的な事故パターンなので、規約上の異常として扱う（`../../docs/testing.md`）。
+//!
+//! 起動済みサーバーを HTTP で外から叩くブラックボックステスト。設計（fastweb 由来）:
 //! - アプリ本体をリンクしない → アプリを変更してもこのクレートは再ビルド不要。
 //! - 起動は「同梱」ではなく「待機」で解く: 先に `cargo run -p app` で起動しておき、
 //!   テストはヘルスチェックをリトライしてから叩く（bacon再起動レースに強い）。
 //!   DB が要るので `./run db-setup` 済みのサーバを起動しておくこと。
 //!
-//! lastshot 固有の検証（DB保存カウンター）:
-//! - トップHTMLにカウンター要素と「同じインスタンスの埋め込みJSON」(view-data)があること。
-//! - HTMX フラグメント経路 `POST /increment` が、フルページでなく count 断片(+view-data)を返し、
-//!   値が単調増加すること（= ブラウザを動かさずに HTMX のサーバ側出力を直接検証）。
-//! - Connect API の Increment が「現在値 + 1」を返すこと（= DB が効いている）。
+//! [`spec_counter.md`]: ./spec_counter.md
 
 use std::time::Duration;
 
@@ -31,6 +31,7 @@ async fn wait_until_up(client: &reqwest::Client, base: &str) {
     panic!("server not reachable at {base} — 先に `./run db-setup && ./run dev` で起動しておくこと");
 }
 
+/// **C-1**: トップページはカウンターを描画する。
 #[tokio::test]
 async fn home_renders_counter_with_embedded_view() {
     let base = base_url();
@@ -57,6 +58,7 @@ async fn home_renders_counter_with_embedded_view() {
     );
 }
 
+/// **C-3**: Connect API と HTML は同じカウント値を共有する。
 #[tokio::test]
 async fn connect_increment_advances_value() {
     let base = base_url();
@@ -95,6 +97,8 @@ async fn connect_increment_advances_value() {
     );
 }
 
+/// **C-2**: HTMX の増加は「フラグメント + 単調増加」で返る。
+///
 /// HTMX のボタン（`hx-post="/increment" hx-target="#count" hx-swap="innerHTML"`）が叩く経路を、
 /// ブラウザを動かさずに HTTP で直接検証する。HTMX エンドポイントは「HTML 断片を返すただの POST」
 /// なので、返ってきた断片の不変条件を assert すれば API レベルでテストできる。

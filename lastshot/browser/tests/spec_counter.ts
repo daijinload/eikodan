@@ -1,14 +1,20 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * lastshot の核（スキーマ＝単一の真実）をブラウザ駆動で検証する。
+ * カウンター機能の**仕様テスト**（ブラウザ駆動）。契約の正本は隣の spec_counter.md。
  *
- * 同じ生成型 CounterView が「画面の数字 / 末尾の <!-- view-data --> 埋め込みJSON /
- * Connect API（GetCount・Increment）」の3経路に流れる。データ取得は1回・出口は複数なので
- * 3つは常に一致するはず ── それを実ブラウザ + 実 HTMX swap + 実 API で突き合わせる。
+ * 各テストは md の契約 ID（B-1 / B-2）に 1:1 で対応する。**期待値を変えるときは先に md を変える**
+ * ── md が動かずここだけ動く diff は「バグ修正でテストを黙らせた」典型的な事故パターンなので、
+ * 規約上の異常として扱う（../../docs/testing.md）。
+ *
+ * 何を見ているか: 同じ生成型 CounterView の1インスタンスが「画面の数字 / <!-- view-data -->
+ * 埋め込みJSON / Connect API」の3経路に流れる。データ取得は1回・出口は複数なので3つは常に一致する
+ * はず ── それを実ブラウザ + 実 htmx swap + 実 API で突き合わせる。HTML 文字列としての不変条件は
+ * HTTP 層（tests-http）の担当で、ここでは見ない（担当範囲の表は md）。
  *
  * 前提: サーバが起動済み（`./run db-setup && ./run dev`。CI ならワークフローが起動）。
  *       接続先は playwright.config.ts の baseURL（BASE_URL で上書き可）。
+ *       workers:1 の直列実行を前提に**厳密な +1** を要求する（md「前提条件」）。
  */
 
 // `<!-- view-data\n{json}\n-->` コメントから JSON を取り出す（webcore が埋め込む形式）。
@@ -30,7 +36,8 @@ async function shownCount(page: import('@playwright/test').Page): Promise<number
   return Number(text.trim());
 }
 
-test('トップ: 画面の数字 = 埋め込み view-data = Connect GetCount', async ({ page, request }) => {
+/** **B-1**: トップページは3経路（画面 / 埋め込み view-data / Connect GetCount）が同じ値を指す。 */
+test('B-1 トップ: 画面の数字 = 埋め込み view-data = Connect GetCount', async ({ page, request }) => {
   const resp = await page.goto('/');
   expect(resp?.ok(), 'トップが 2xx で返る').toBeTruthy();
 
@@ -52,7 +59,13 @@ test('トップ: 画面の数字 = 埋め込み view-data = Connect GetCount', a
   expect(valueOf(await api.json()), '画面の数字と GetCount が一致').toBe(shown);
 });
 
-test('+1: 画面・フラグメント view-data・Connect が揃って +1 する', async ({ page, request }) => {
+/**
+ * **B-2**: `+1` クリックで画面・フラグメント view-data・Connect が揃って +1 する。
+ *
+ * 厳密な +1 を要求できるのは workers:1 の直列実行が前提だから（HTTP 層 C-2 は単調増加）。
+ * 並列化するなら**先に md の B-2 を単調増加へ緩めること**。
+ */
+test('B-2 +1: 画面・フラグメント view-data・Connect が揃って +1 する', async ({ page, request }) => {
   await page.goto('/');
   const before = await shownCount(page);
 
