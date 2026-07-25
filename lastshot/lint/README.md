@@ -35,6 +35,8 @@
 ```
 
 `./run lint` は **push 前に節目で手動**で回す（`./run css-check` と同じ運用。pre-commit は使わない）。
+**CI でも同じ `./run lint` が `lint` ジョブとして走る**（`test` ジョブとは並列）。CI は取りこぼしの網で、
+手元で通してから push する運用は変わらない ── 理由と CI 側のツール導入は [`../docs/lint-format.md`](../docs/lint-format.md) 「運用」。
 
 ## 整形を当てる（書き込み）
 
