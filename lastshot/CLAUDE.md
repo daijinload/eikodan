@@ -43,8 +43,10 @@
   （依存を1か所に集約 ＝ workspace 共通 deps を不用意に増やさない）。
 - **接続先**: 開発は既定でネイティブPGの unix ソケット（pg-bench の結論で最速）。本番/CI は `DATABASE_URL` で
   TCP（compose 同一網）に上書き。`db::connect()` がこの分岐を持つ。dev の database 名は `PGDATABASE`
-  で上書き可（既定 `lastshot`）。`./run` が worktree 名からスロットを決めて `PORT`/`PGDATABASE`/
-  `COMPOSE_PROJECT_NAME` を export し、dan1〜dan4 を並列起動しても衝突しない（README「worktree 並列起動」）。
+  で上書き可（既定 `lastshot`）。`./run` が worktree のディレクトリ名から `PORT`（末尾数字 → 3001…）/
+  `PGDATABASE`（名前そのまま → `lastshot_dan1`）/ `COMPOSE_PROJECT_NAME` を export し、dan1〜dan4 を
+  並列起動しても衝突しない。**worktree 名の末尾には数字を付ける**（無いとポートが決まらず fail-fast。
+  README「worktree 並列起動」）。
 - **migrations は Flyway で管理する**（docker image `flyway/flyway` で実行 ── ローカルに JRE/CLI は入れない）。
   ファイルは `migrations/V<version>__<desc>.sql`（区切りは `__` 2個）。版数は連番(`V1`,`V2`..)ではなく
   `yyyyMMddHHmmss` の**タイムスタンプ**にする＝ブランチ並行時の版数衝突を避けるため

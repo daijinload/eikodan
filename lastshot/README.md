@@ -190,17 +190,68 @@ CSS=built cargo run -p app  # 最終目視: CLI生成の /static/app.css を配�
 > 実ブラウザで突き合わせる（詳細は [`browser/README.md`](./browser/README.md)）。tests-http/ と同じく
 > 「サーバは別で起動しておく」前提（アプリ本体をビルド/同梱しない＝疎結合）。
 
+## ポートと DB 接続（既定値）
+
+何も指定しないとき（本流 `eikodan`）に使うポートは 3 つだけ。
+
+| 何                        | ポート     | 誰が使うか                                                     |
+| ------------------------- | ---------- | -------------------------------------------------------------- |
+| app（HTML + Connect API） | **3000**   | `./run dev` / `./run release` / `./run up`（compose の公開側） |
+| ネイティブ Postgres       | **5432**   | マシンに 1 つだけ常駐。全 worktree で共有                      |
+| `./run ci` の使い捨て PG  | **5433〜** | `./run ci` の実行中だけ。終了時に `docker rm -f` で消える      |
+
+**worktree で動くのは app のポートだけ**（`dan2` → 3002。下記「worktree 並列起動」）。
+
+### 経路ごとの接続方式
+
+| 経路                  | app の居場所      | DB                   | 接続              | DB ポート               |
+| --------------------- | ----------------- | -------------------- | ----------------- | ----------------------- |
+| `./run dev`（日常）   | ホスト            | ネイティブ（共有）   | **unix ソケット** | 使わない                |
+| `./run up`（compose） | コンテナ          | コンテナ             | TCP（同一網）     | ホストに公開しない      |
+| `./run ci`（CI 再現） | ホスト（release） | コンテナ（使い捨て） | TCP（localhost）  | **5432+slot**（5433〜） |
+
+- **dev が unix ソケットなのは速度のため。** Mac ではホスト→コンテナが VM 越えになり、
+  実測 218,701 tps に対し Docker 経由 18,241 tps（約 1/12。pgbench c8 SELECT →
+  [`docs/postgres.md`](./docs/postgres.md)）。`db::connect()` が `DATABASE_URL` の有無で分岐する。
+- **`./run ci` だけ DB をホストに公開する**のは、app がコンテナの外（ホストの release バイナリ）に
+  いるため。native PG の 5432 と他 worktree の ci に当たらないよう app ポートと同じ幅ずらす。
+
 ## worktree 並列起動（ポート/DB 自動分離）
 
 `git worktree` で `dan1`〜`dan4` を分けて同時に動かしてもぶつからない。**`./run` が worktree の
-ディレクトリ名から“スロット”を決め**、`PORT`・`PGDATABASE`・`COMPOSE_PROJECT_NAME` を揃えて
+ディレクトリ名を分離キーにして**、`PORT`・`PGDATABASE`・`COMPOSE_PROJECT_NAME` を揃えて
 export する（手で割り当てる必要も、worktree ごとの設定ファイルも無い）。
 
-| worktree          | app ポート | dev DB（database 名） | compose プロジェクト |
-| ----------------- | ---------- | --------------------- | -------------------- |
-| `eikodan`（本流） | 3000       | `lastshot`            | `lastshot`           |
-| `dan2`            | 3002       | `lastshot_dan2`       | `lastshot_dan2`      |
-| `dan4`            | 3004       | `lastshot_dan4`       | `lastshot_dan4`      |
+- **DB 名・compose プロジェクト名** … worktree 名をそのまま使う（`dan2` → `lastshot_dan2`）。
+- **ポート** … **worktree 名の末尾数字**がそのまま下位桁になる（`dan2` → 3002、`dan12` → 3012）。
+
+| worktree          | app ポート | dev DB（database 名） | compose プロジェクト | `./run ci` の使い捨て PG |
+| ----------------- | ---------- | --------------------- | -------------------- | ------------------------ |
+| `eikodan`（本流） | 3000       | `lastshot`            | `lastshot`           | 5432                     |
+| `dan1`            | 3001       | `lastshot_dan1`       | `lastshot_dan1`      | 5433                     |
+| `dan2`            | 3002       | `lastshot_dan2`       | `lastshot_dan2`      | 5434                     |
+| `dan3`            | 3003       | `lastshot_dan3`       | `lastshot_dan3`      | 5435                     |
+| `dan4`            | 3004       | `lastshot_dan4`       | `lastshot_dan4`      | 5436                     |
+
+### 名前の末尾には数字を付ける（付いていないと止まる）
+
+末尾に数字が無い worktree 名（例 `feat-search`）は**エラーで止まる**。
+
+```
+$ ./run dev
+worktree 名 'feat-search' の末尾に数字が無いのでポートが決まりません。
+  対処1: 数字付きの名前で worktree を切る (例: dan5 → PORT=3005)
+  対処2: この場限りなら明示する    (例: PORT=3009 ./run dev)
+```
+
+**「空いているポートを自動で取る」形は採らない。** 自動割り当てだと `dan1` のポートが起動のたびに
+変わって「今どれだっけ？」になる。ポートは worktree 名から**必ず同じ数値に決まる**ほうがよい
+（→ [`docs/decisions/README.md`](./docs/decisions/README.md) #13）。
+
+> 本流の判定はディレクトリ名 `eikodan`。別名でクローンしている場合は `MAIN_WORKTREE=<名前>` を渡す
+> （`MAIN_WORKTREE=myrepo ./run dev` → 3000 / `lastshot`）。
+> 末尾数字が同じ worktree を 2 つ作る（`dan2` と `feat2`）とポートは衝突するが、DB 名は名前ベースなので
+> 分かれたままで、衝突は起動時の bind エラーですぐ分かる。
 
 ### 初期セットアップ（worktree を増やしたとき）
 
@@ -212,19 +263,20 @@ Postgres は全 worktree で 1 つを共有するので、`db-start` は **マ�
 ./run db-start
 
 # 〔新しい worktree ごとに1回〕この worktree 用の DB を作成＋Flyway で migrations 適用（冪等）
-cd ../dan2/lastshot   # 例: dan2 worktree へ
-./run db-setup        # → database `lastshot_dan2` を作成（PGDATABASE は ./run が自動で決める）
-./run dev             # → http://127.0.0.1:3002（ポートも自動でスロット割り当て）
+git worktree add ../dan5 -b feat/xxx   # 名前の末尾に数字を付ける（= ポート 3005）
+cd ../dan5/lastshot
+./run db-setup        # → database `lastshot_dan5` を作成（PGDATABASE は ./run が自動で決める）
+./run dev             # → http://127.0.0.1:3005（ポートも名前から自動で決まる）
 ```
 
 > 既存の `lastshot` 1 個で動かしていた worktree も、上の `./run db-setup` を一度流せば
 > `lastshot_danN` に切り替わる（旧 `lastshot` は本流 eikodan が使い続ける）。
 > やり直したいときは `./run db-reset`（その worktree の DB だけ作り直す。カウント値もリセット）。
 
-- **DB は 1つのネイティブ Postgres を共有**（unix ソケットなので“DBポート”自体が無い）。中の
-  **database 名だけ** worktree ごとに分ける（`./run db-setup` が `lastshot_dan2` を作る）。
-- **dev も compose も同じ機構**。compose は postgres を publish しないうえ、プロジェクト名で
-  ネットワーク/コンテナが分離されるので、`./run up` を複数 worktree で同時に立てても衝突しない。
+- **DB は 1つのネイティブ Postgres を共有し、database 名だけ分ける**（`./run db-setup` が
+  `lastshot_dan2` を作る）。ポートでは分けない（上記「ポートと DB 接続」）。
+- **compose も同じ機構**。postgres を publish せずプロジェクト名で分離するので、`./run up` を
+  複数 worktree で同時に立てても衝突しない。
 - **テスト並列**: worktree ごとにポートも DB も別なので、`dan1` と `dan2` で同時に
   `./run dev` → `./run test-http` を回しても干渉しない（`tests-http` は `BASE_URL` を読む）。
 - 各値は外から渡せば優先（例: `PORT=3009 ./run dev`）。1つの worktree 内で nextest が
@@ -243,7 +295,9 @@ cd ../dan2/lastshot   # 例: dan2 worktree へ
   手元で一気通しする。接続は CI と同じ **TCP**（`DATABASE_URL` 優先 ＝ 開発既定の unix ソケットでなく
   compose 同一網作法）。postgres は使い捨てコンテナを **worktree ごとのポート**（`5432+slot`）で立て、
   migration は CI と同じ Flyway（`db-migrate` を `--network=host` で使い捨て pg に向ける）で適用。
-  終了時に `trap` で必ずアプリ停止＋コンテナ破棄（`docker rm -f` ＝ 即 SIGKILL）。dan1〜dan4 を並列で
+  終了時に `trap` で必ずアプリ停止＋コンテナ破棄（`docker rm -f` ＝ 即 SIGKILL）。アプリの停止は
+  PID を覚えず **`$PORT` を LISTEN しているプロセスを `kill -9`**（前回の残骸も掃除できる。起動前にも
+  実行するので、ポートを塞いだ別サーバ相手にテストが緑になる事故が起きない）。dan1〜dan4 を並列で
   回しても衝突しない。内部の段階（`build-release` / `ci-db-up` / `ci-migrate` / `ci-app-start` /
   `ci-app-wait` / `ci-app-stop` / `ci-db-down`）も個別タスクとして手で叩ける（`./run help` 参照）。
 - `compose.yml` + `Dockerfile`: app（release / 本番CSS入り）と postgres:17 と flyway を同一網で起動。
