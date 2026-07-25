@@ -1,5 +1,10 @@
 # rust-htmx プロジェクト
 
+> **役割: 実験場。このフォルダは将来削除される。**
+> ここで出した「HTMX 採用の第一弾」の結論は本体 [`lastshot/`](../lastshot/) に取り込み済みで、
+> **知見は [`lastshot/docs/`](../lastshot/docs/) が正**（このフォルダを参照していない＝消しても失われない）。
+> 残しているのは計測を再現するためのコードと手順だけ。
+
 Rust + HTMX + MiniJinja + DaisyUI で組んだ TODO CRUD サンプル。
 親リポジトリ「eikodan」（理想のWebシステムを模索する曳光弾）の第一弾。
 package by featureでcrate分けてビルド高速化を狙う予定だがサンプルなのでベタ置きしている。

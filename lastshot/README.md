@@ -1,25 +1,31 @@
 # lastshot — 最終進化形態（全部入りの本番実装）
 
 `eikodan`（曳光弾＝試し撃ち）の各サブプロジェクトで個別に検証した要素を、**1つに統合した本番実装**。
-名前の由来は [`NAMING.md`](./NAMING.md)（曳光弾を重ねて、最後にこれで撃ち抜く一発＝last shot）。
+名前の由来は [`docs/naming.md`](./docs/naming.md)（曳光弾を重ねて、最後にこれで撃ち抜く一発＝last shot）。
 
 サンプル画面は **DB保存カウンター**（数字＋「+1」ボタンだけの超シンプル構成）。だが裏側は
 全要素入り ── スキーマファースト・Postgres 永続化・ホットリロード・CSSゲートが効いている。
+
+> **この README は「使い方」。** なぜそうしたか・実測値・採らなかった理由は
+> **[`docs/`](./docs/) に集約**してある（入口は [`docs/README.md`](./docs/README.md)）。
+> AIエージェント向けの運用ルールは [`CLAUDE.md`](./CLAUDE.md)。
 
 ## 何を統合したか（各サブプロジェクトの結論を集約）
 
 | 要素                                                                                                                                                       | 出自                                 | lastshot での形                         |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | --------------------------------------- |
-| ノービルドUI（axum + HTMX + MiniJinja + daisyUI）+ ホットリロード + package-by-feature + ビルド最適化（nightly/lld/-Zthreads/Cranelift/dev=opt0/sccache） | [fastweb](../fastweb/)               | 土台                                    |
-| スキーマファースト（`.proto` 単一真実 → 1つの生成型で HTML描画 / `<!-- view-data -->` 埋め込み / Connect API を同源駆動）                                  | [connectweb](../connectweb/)         | 土台                                    |
-| Postgres 永続化（unix ソケット最速 / `query!` マクロ不使用でビルド速度維持）                                                                               | [pg-bench](../pg-bench/)             | `crates/db` + service 層                |
-| サンプル題材（カウンター）                                                                                                                                 | [subsecond-demo](../subsecond-demo/) | `crates/feature-counter`（HTMX + DB化） |
+| ノービルドUI（axum + HTMX + MiniJinja + daisyUI）+ ホットリロード + package-by-feature + ビルド最適化（nightly/lld/-Zthreads/Cranelift/dev=opt0/sccache） | fastweb（実験場）               | 土台                                    |
+| スキーマファースト（`.proto` 単一真実 → 1つの生成型で HTML描画 / `<!-- view-data -->` 埋め込み / Connect API を同源駆動）                                  | connectweb（実験場）         | 土台                                    |
+| Postgres 永続化（unix ソケット最速 / `query!` マクロ不使用でビルド速度維持）                                                                               | pg-bench（実験場）             | `crates/db` + service 層                |
+| サンプル題材（カウンター）                                                                                                                                 | subsecond-demo（実験場） | `crates/feature-counter`（HTMX + DB化） |
 | CSS最終確認ゲート（Tailwind CLI フルパージ + semgrep）                                                                                                     | fastweb `assets/`                    | `assets/`                               |
-| タスクランナー（bash 関数ディスパッチャ）                                                                                                                  | [task-runners](../task-runners/)     | `./run`                                 |
-| 開発環境（macOS bash 5.x）                                                                                                                                 | [bash-setup.md](../bash-setup.md)    | 下記セットアップから参照                |
+| タスクランナー（bash 関数ディスパッチャ）                                                                                                                  | task-runners（実験場）     | `./run`                                 |
+| 開発環境（macOS bash 5.x）                                                                                                                                 | [docs/bash-setup.md](./docs/bash-setup.md)    | 下記セットアップから参照                |
 
-> 除外: **subsecond ホットパッチ**（axum 素組には非対応＝Dioxus 移行が要る。記録は `NAMING.md` 系の議論のみ）。
+> 除外: **subsecond ホットパッチ**（axum 素組には非対応＝Dioxus 移行が要る。判断の記録は
+> [`docs/decisions/0001-subsecond-hotpatch.md`](./docs/decisions/0001-subsecond-hotpatch.md)）。
 > **rust-htmx** は fastweb が上位版なので取り込まない。
+> 他に採らなかったものの一覧は [`docs/decisions/`](./docs/decisions/)。
 
 ## 設計の核（スキーマ＝単一の真実）
 
@@ -49,7 +55,7 @@ brew install protobuf     # schema/build.rs の codegen が protoc を使う
 brew install postgresql@17
 # 4) Docker Desktop（マイグレーション = Flyway を docker image で実行。compose / CI も同じ）
 #    起動しておくだけ（`./run db-migrate` が host.docker.internal 経由で native PG に繋ぐ）
-# 5) bash 5.x 推奨（macOS 既定の 3.2 でも ./run は動くが 5.x が望ましい）→ ../bash-setup.md
+# 5) bash 5.x 推奨（macOS 既定の 3.2 でも ./run は動くが 5.x が望ましい）→ ./docs/bash-setup.md
 # 6) CSS ゲート用（最終確認のときだけ。日常はCDNなので不要）
 uv tool install semgrep   # css-check の semgrep（CIと同手段。uv未導入なら brew install semgrep）
 ./run css-setup           # Tailwind CLI + daisyUI を assets/ に取得（.gitignore 済み）
@@ -136,8 +142,8 @@ migrations/V20260614153500__seed_counter.sql    # 初期行 id=1, value=0
 DB は dev と同じ native（`./run db-setup` 済み前提）。`./run css-setup` でTailwindを取得していること。
 
 > Rust 変更の反映は再ビルド + プロセス再起動で約1秒（体感の端から端は ~1.2〜1.3s）。
-> cold start の正体・短縮策（codesign / systemfd / リンカ）の実測は [`COLD-START.md`](./COLD-START.md)。
-> 設計とビルドツール両面の高速化施策の総まとめは [`FAST-RUST.md`](./FAST-RUST.md)。
+> cold start の正体・短縮策（codesign / systemfd / リンカ）の実測は [`docs/cold-start.md`](./docs/cold-start.md)。
+> 設計とビルドツール両面の高速化施策の総まとめは [`docs/fast-rust.md`](./docs/fast-rust.md)。
 
 ## CSS（日常はCDN・最終確認だけビルド）
 
@@ -153,7 +159,7 @@ CSS=built cargo run -p app  # 最終目視: CLI生成の /static/app.css を配�
 ## lint / format（push前ゲート）
 
 種別ごとに最適なツールを当てる（Rust=rustfmt/clippy・他=oxfmt・proto=buf・shell=shfmt/shellcheck・SQL=sqlfluff。
-1本では賄えない）。配線とルールは [`lint/`](./lint/) に自己完結（選定根拠は [`../lint-format/`](../lint-format/) showcase）。
+1本では賄えない）。配線とルールは [`lint/`](./lint/) に自己完結（選定根拠は [`docs/lint-format.md`](./docs/lint-format.md)）。
 
 ```sh
 ./run lint-setup          # 初回のみ: oxfmt を lint/.lint-tools にローカル固定、不足分は brew
@@ -247,12 +253,12 @@ cd ../dan2/lastshot   # 例: dan2 worktree へ
   `.github/workflows/` しか実行しないため。`lastshot/**` だけを対象に path フィルタ）。中身は
   build(release) → CSSゲート → 起動 → `test-http` → ブラウザE2E をネイティブで一気通し。migration は
   `./run db-migrate`（postgres は service コンテナなので `--network=host` + localhost で繋ぐ＝ローカルと同じ Flyway）。
-- 「compose分割 vs 全部入りsingle」の CI環境比較は計測フェーズに保留中（[`../container-ops.md`](../container-ops.md)）。
+- 「compose分割 vs 全部入りsingle」の CI環境比較は計測フェーズに保留中（[`docs/container-ops.md`](./docs/container-ops.md)）。
   まずは「緑になる CI を1本」通す段階。
 
 ### CI の高速化方針（ARM 実機計測で取捨選択）
 
-> **測り方・実数・採否理由の詳細は [`CI-PERFORMANCE.md`](./CI-PERFORMANCE.md)**（調査ログ）。ここは要約。
+> **測り方・実数・採否理由の詳細は [`docs/ci-performance.md`](./docs/ci-performance.md)**（調査ログ）。ここは要約。
 
 runner は `ubuntu-24.04-arm`（ローカル Apple Silicon・arm64 Docker と**アーキ一致**。public repo で無料）。
 setup 区間は**推測せず ARM 実機ベンチで効果を測って**取捨選択した:
@@ -306,4 +312,4 @@ lastshot/
 高速化フラグの位置は fastweb と同じ（リンカ/threads/sccache=`.cargo/config.toml`、nightly=`rust-toolchain.toml`、
 dev=全クレート opt-level 0 / Cranelift=`Cargo.toml`）。これらは **dev(nightly) 向け**で、**本番(Docker)は stable で焼く**
 （`RUSTUP_TOOLCHAIN=stable` + `assets/strip-nightly.sh`。上記「結合・本番ビルド」参照）。
-実測根拠は [`fastweb/BENCHMARK.md`](../fastweb/BENCHMARK.md)。
+実測根拠は [`docs/build-speed.md`](./docs/build-speed.md)。

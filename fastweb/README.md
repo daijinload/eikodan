@@ -1,5 +1,10 @@
 # fastweb
 
+> **役割: 実験場。このフォルダは将来削除される。**
+> ここで出した「ビルド回避 + package by feature」の結論は本体 [`lastshot/`](../lastshot/) に取り込み済みで、
+> **知見は [`lastshot/docs/`](../lastshot/docs/) が正**（このフォルダを参照していない＝消しても失われない）。
+> 残しているのは計測を再現するためのコードと手順だけ。
+
 「ビルドを避けて開発する」ことに全振りした、Rust + HTMX + MiniJinja + daisyUI の曳光弾。
 **変更の7〜8割をノービルドで反映、Rustを触っても数秒、最後だけ release ビルド**という三層ループを実現する。
 
@@ -14,12 +19,12 @@
 - **package by feature**: 機能ごとに葉クレートを切り、`cargo check -p <feature>` が一瞬。
 - **nightly チューニング**: lld リンカ / 並列フロントエンド(`-Zthreads`) / Cranelift バックエンド。
   dev profile は依存も自前も `opt-level=0` でフルビルドを最小化する（本番動作速度は `[profile.release]`
-  が opt-3 で担保するので dev で取りに行かない（本番デプロイで LTO を盛りたければ lastshot 側の `release-max` プロファイル → 実測根拠 [`BENCHMARK.md`](BENCHMARK.md) ⑤⑥）。
+  が opt-3 で担保するので dev で取りに行かない（本番デプロイで LTO を盛りたければ lastshot 側の `release-max` プロファイル → 実測根拠 [`lastshot/docs/build-speed.md`](../lastshot/docs/build-speed.md) ⑤⑥）。
 - **sccache**（コンパイルキャッシュ）: 重い依存をキャッシュから返す。incremental は既定ONのまま併用するので、
-  日常の差分ビルド/起動の速さはそのまま（→ BENCHMARK.md ④）。
+  日常の差分ビルド/起動の速さはそのまま（→ lastshot/docs/build-speed.md ④）。
 - **connect-rpc** を同じ axum・同じポートに同居（型付きAPIが必要なとき用）。
 
-> 監視 → 生成 → リロードの**具体的な流れとキャッシュの扱い**は [HOTRELOAD.md](HOTRELOAD.md)。
+> 監視 → 生成 → リロードの**具体的な流れとキャッシュの扱い**は [lastshot/docs/hot-reload.md](../lastshot/docs/hot-reload.md)。
 
 ## セットアップ（初回だけ）
 ```sh

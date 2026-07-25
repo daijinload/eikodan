@@ -7,7 +7,7 @@
 # 追加ツール無しの素ビルドにするため env で無効化（実測確認済み: RUSTFLAGS="" が .cargo/config.toml の
 # target rustflags を置換、CARGO_BUILD_RUSTC_WRAPPER="" が sccache を無効化）。
 #
-# 注: compose分割 vs 全部入りsingle の「CI環境比較」は最終形態の計測フェーズに保留中（container-ops.md）。
+# 注: compose分割 vs 全部入りsingle の「CI環境比較」は最終形態の計測フェーズに保留中（lastshot/docs/container-ops.md）。
 #     ここではまず「ネイティブで緑になる CI」を1本通す。
 name: lastshot CI
 

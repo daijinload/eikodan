@@ -35,7 +35,7 @@ serde_json = "1"
 # 以前は依存だけ opt-level 3 で焼いていたが、cargo clean / 新規checkout / depsが変わるブランチ
 # 切替のたびに +約11s/-45% のコストを払う一方、dev 動作の便益(+17% throughput)は手元の操作
 # 頻度では体感ゼロ・負荷試験は release でやるので不要 = 撤回した。
-# 実測: ../fastweb/BENCHMARK.md ⑤
+# 実測: docs/build-speed.md ⑤
 # ───────────────────────────────────────────────────────────
 [profile.dev]
 opt-level = 0
@@ -48,7 +48,7 @@ opt-level = 0
 codegen-backend = "cranelift" # 依存も Cranelift で統一（実測で wall 差 ±0.2s = 誤差・CPU は約-10%）
 # 旧構成（依存だけ llvm 強制）を撤回。理由: 自前と依存の backend を揃えるほうが単純で、
 # wall は同等・cargo の並列がコア飽和させるので CPU 減は wall に出ない・fallback warning も無し。
-# 実測根拠: ../fastweb/BENCHMARK.md ⑤「依存も cranelift にできるか」
+# 実測根拠: docs/build-speed.md ⑤「依存も cranelift にできるか」
 
 # ───────────────────────────────────────────────────────────
 # release-max プロファイル: 最大最適化（本番デプロイ向け）
@@ -70,7 +70,7 @@ codegen-backend = "cranelift" # 依存も Cranelift で統一（実測で wall �
 #   release-max  : 41.9s build / 5.0MB / 55,058 req/sec avg(3試行) / p99 1.11ms
 #   差分         : build 約3.2倍 / バイナリ -34% / throughput +2.0% / p99 -3%
 # バイナリ縮小は strip 無しでも効く（LTO の dead code elimination による）。
-# 詳細・実測手順は BENCHMARK.md ⑥。
+# 詳細・実測手順は docs/build-speed.md ⑥。
 # ───────────────────────────────────────────────────────────
 [profile.release-max]
 inherits = "release"

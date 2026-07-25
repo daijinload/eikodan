@@ -9,7 +9,7 @@ lastshot の核（**スキーマ＝単一の真実**）を実ブラウザで検�
 の3経路に流れる。データ取得は1回・出口は複数なので3つは常に一致するはず ── それを
 **実ブラウザ + 実 HTMX swap + 実 API** で突き合わせるのがこのテスト（`tests/counter.spec.ts`）。
 
-出自は [`../../playwright-sample/`](../../playwright-sample/)（Playwright 採用・MCP 不採用の結論）。
+採否の判断は [`../docs/decisions/0002-playwright-mcp.md`](../docs/decisions/0002-playwright-mcp.md)（Playwright 採用・MCP 不採用）。
 AI からの探索的操作は agent-browser に役割分担し、**安定した回帰テストは Playwright 本体**で書く方針。
 
 ## 位置づけ（tests-http との違い）

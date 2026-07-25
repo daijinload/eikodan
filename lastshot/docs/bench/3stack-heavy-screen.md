@@ -2,7 +2,7 @@
 
 Rust / Node.js(Next.js) / PHP(Laravel) を **同じ DB・同じ画面・本番ビルド・同じ localhost** で
 横並び計測した記録のうち、**「画面を大きくして同時アクセスを増やすと差がどう出るか」** を
-調べたパート。カウンター（極小画面）の比較は [`lastshot-bench/`](./lastshot-bench/) にある。
+調べたパート。カウンター（極小画面）の比較は [`lastshot-bench/`](https://github.com/daijinload/eikodan/tree/feat/lastshot-3stack-compare/lastshot-bench) にある。
 ここはその続きで、**業務でありがちな重い一覧画面（受注明細レポート）** を題材にした。
 
 > 計測日: 2026-06-14 / 実装は別ブランチ `feat/lastshot-3stack-compare`（`feature-report` ほか）。
@@ -106,7 +106,7 @@ next は同時 20 本で **p50 が 0.68 秒・上限 30 RPS**。lastshot の約 
 >    プロセスを何個に増やそうが 1 リクエストあたりのコストは動かない。**これが本当に強い主張。**
 > 2. **素のサービング構成での同時さばき差（構成差・設定を変えれば縮む）** ── 上限 RPS が 30 まで
 >    落ちる主因は、**next が 1 Node プロセスで CPU バウンドな描画を直列にさばいている**こと。実際に
->    PM2 cluster で 15 プロセスに多重化すると（[`lastshot-bench/README.md`](./lastshot-bench/README.md)
+>    PM2 cluster で 15 プロセスに多重化すると（[`lastshot-bench/README.md`](https://github.com/daijinload/eikodan/tree/feat/lastshot-3stack-compare/lastshot-bench/README.md)
 >    の「追加検証」を参照）**RPS は 31 → 208（約 6.7 倍）・p50 は 646ms → 82ms** まで改善し、対 lastshot
 >    の比率は **1/92 → 1/14** に縮む。これは言語の地力ではなく**起動構成の差**。
 >
@@ -261,7 +261,7 @@ dev で `rows=5000` をブラウザ（キャッシュオフ・ウォーム）で
 
 ## 再現方法
 
-3 スタックを本番起動してから（[`lastshot-bench/`](./lastshot-bench/) 参照）:
+3 スタックを本番起動してから（[`lastshot-bench/`](https://github.com/daijinload/eikodan/tree/feat/lastshot-3stack-compare/lastshot-bench) 参照）:
 
 ```sh
 cd lastshot-bench
