@@ -11,20 +11,23 @@
 # 注: .cargo/config.toml の `-Z threads=8`(nightly rustflag) は Dockerfile の RUSTFLAGS="" が
 #   target rustflags ごと上書きするので、ここでは触らない。
 set -euo pipefail
-cd "$(dirname "$0")/.."   # → lastshot/（Cargo.toml のある場所）
+cd "$(dirname "$0")/.." # → lastshot/（Cargo.toml のある場所）
 
 m=Cargo.toml
 # fail-loud: 期待行が無ければ Cargo.toml の構造が変わった合図。黙って素通りさせない。
-need() { grep -qE "$1" "$m" || { echo "strip-nightly: expected pattern not found in $m: $1" >&2; exit 1; }; }
+need() { grep -qE "$1" "$m" || {
+  echo "strip-nightly: expected pattern not found in $m: $1" >&2
+  exit 1
+}; }
 need '^cargo-features = \["codegen-backend"\]'
-need '^codegen-backend = "cranelift"'  # 自前 + 依存とも cranelift に統一済（PR #34）
+need '^codegen-backend = "cranelift"' # 自前 + 依存とも cranelift に統一済（PR #34）
 
 # nightly 専用の3行（と cargo-features 直前のコメント）を削除。
 # sed -i は BSD/GNU で挙動が違うので temp+mv で移植性を確保する。
 tmp=$(mktemp)
 sed -e '/^# codegen-backend をプロファイルで指定するための nightly opt-in。$/d' \
-    -e '/^cargo-features = \["codegen-backend"\]$/d' \
-    -e '/^codegen-backend = /d' \
-    "$m" > "$tmp"
+  -e '/^cargo-features = \["codegen-backend"\]$/d' \
+  -e '/^codegen-backend = /d' \
+  "$m" >"$tmp"
 mv "$tmp" "$m"
 echo "strip-nightly: removed nightly-only lines from $m (now stable-parseable)"

@@ -20,17 +20,17 @@ lastshot のタスクは `make` でも `just` でもなく **`./run`（bash 関�
 
 ## 比較表
 
-| ツール | 定義ファイル | 形式 | 依存解決 | 引数渡し | 実体 | インストール |
-|---|---|---|---|---|---|---|
-| **make** | `Makefile` | Make 独自(タブ必須) | ネイティブ(前提条件) | `make t VAR=val` | C / 大抵プリイン | 標準(macOS は 3.81 と古い) |
-| **just** | `Justfile` | Make 風を現代化 | `test: build` | `just t Alice`(位置・既定値) | Rust / 単一バイナリ | `brew install just` |
-| **Task** | `Taskfile.yml` | YAML | `deps: [build]`(既定で並列) | `task t VAR=val` / `-- args` | Go / 単一バイナリ | `brew install go-task` |
-| **mise** | `mise.toml` | TOML(+スクリプト) | `depends` | `usage` spec → `$usage_*` | Rust / 単一バイナリ | `brew install mise` |
-| **mage** | `magefile.go` | **Go コード** | `mg.Deps(Build)` | 型付き関数引数 | Go(要 go.mod) | `brew install mage` |
-| **cargo-make** | `Makefile.toml` | TOML | `dependencies` | `${1}` / `${@}` | Rust / cargo 統合 | `cargo install cargo-make` |
-| **mask** | `maskfile.md` | **Markdown** | 組み込みなし(`$MASK` で自己呼出) | 見出しの `(name)` | Rust / 単一バイナリ | `brew install mask` |
-| **xc** | `README.md` | **Markdown** | `Requires: build` | `$1`(位置) | Go / 単一バイナリ | `go install .../xc/cmd/xc@latest` |
-| **bash** | `run`(自作・採用) | **シェル関数 + ディスパッチャ** | 関数呼出 + `once` で重複排除 | `$1` / `${1:-既定}` | bash のみ | **不要**（`./run`） |
+| ツール         | 定義ファイル      | 形式                            | 依存解決                         | 引数渡し                     | 実体                | インストール                      |
+| -------------- | ----------------- | ------------------------------- | -------------------------------- | ---------------------------- | ------------------- | --------------------------------- |
+| **make**       | `Makefile`        | Make 独自(タブ必須)             | ネイティブ(前提条件)             | `make t VAR=val`             | C / 大抵プリイン    | 標準(macOS は 3.81 と古い)        |
+| **just**       | `Justfile`        | Make 風を現代化                 | `test: build`                    | `just t Alice`(位置・既定値) | Rust / 単一バイナリ | `brew install just`               |
+| **Task**       | `Taskfile.yml`    | YAML                            | `deps: [build]`(既定で並列)      | `task t VAR=val` / `-- args` | Go / 単一バイナリ   | `brew install go-task`            |
+| **mise**       | `mise.toml`       | TOML(+スクリプト)               | `depends`                        | `usage` spec → `$usage_*`    | Rust / 単一バイナリ | `brew install mise`               |
+| **mage**       | `magefile.go`     | **Go コード**                   | `mg.Deps(Build)`                 | 型付き関数引数               | Go(要 go.mod)       | `brew install mage`               |
+| **cargo-make** | `Makefile.toml`   | TOML                            | `dependencies`                   | `${1}` / `${@}`              | Rust / cargo 統合   | `cargo install cargo-make`        |
+| **mask**       | `maskfile.md`     | **Markdown**                    | 組み込みなし(`$MASK` で自己呼出) | 見出しの `(name)`            | Rust / 単一バイナリ | `brew install mask`               |
+| **xc**         | `README.md`       | **Markdown**                    | `Requires: build`                | `$1`(位置)                   | Go / 単一バイナリ   | `go install .../xc/cmd/xc@latest` |
+| **bash**       | `run`(自作・採用) | **シェル関数 + ディスパッチャ** | 関数呼出 + `once` で重複排除     | `$1` / `${1:-既定}`          | bash のみ           | **不要**（`./run`）               |
 
 ## 選び方（一般論）
 

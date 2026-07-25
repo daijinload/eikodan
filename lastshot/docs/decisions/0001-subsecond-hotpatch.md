@@ -22,11 +22,11 @@
 
 Dioxus 0.7 + `dx serve --hotpatch` で実働デモを組んで実測した。
 
-| 方式 | サイクル時間（平均） | 内訳 |
-|---|---|---|
-| axum + cargo-watch | **1405ms** | 3回計測: 1420 / 1393 / 1403ms |
-| Dioxus + subsecond（warm） | **214ms** | `cargo clean` 後の Session 3 で 263 / 213 / 212 / 218ms |
-| 同 cold（dx CLI 初回起動時のみ） | 1255ms | Session 1 の1回目だけ |
+| 方式                             | サイクル時間（平均） | 内訳                                                    |
+| -------------------------------- | -------------------- | ------------------------------------------------------- |
+| axum + cargo-watch               | **1405ms**           | 3回計測: 1420 / 1393 / 1403ms                           |
+| Dioxus + subsecond（warm）       | **214ms**            | `cargo clean` 後の Session 3 で 263 / 213 / 212 / 218ms |
+| 同 cold（dx CLI 初回起動時のみ） | 1255ms               | Session 1 の1回目だけ                                   |
 
 → 2回目以降は **約6倍速（1.4s → 0.21s）**。300ms を切るので人間の「即時感」のしきい値を跨ぐ。
 **速度は十分実用的**だった。
@@ -56,15 +56,15 @@ Dioxus 0.7 + `dx serve --hotpatch` で実働デモを組んで実測した。
 
 ### subsecond クレート本体の限界
 
-| 対象 | 挙動 | 公式記述 |
-|---|---|---|
-| struct のレイアウト・アライメント変更 | **✗ フルビルド** | "Subsecond currently does not support hot-reloading of structs. This is because the generated code assumes a particular layout and alignment of the struct." |
-| tip crate 以外（依存crate, workspace member）の編集 | **✗ パッチ非対象** | "Rust hot-patching currently only tracks the 'tip' crate in your project. If you edit code in any of your dependencies … DX does not register that change" |
-| `main.rs` + `lib.rs` 二段構成 | **✗ パッチ機能不全** | "Crate setups that have a main.rs importing a lib.rs won't patch sensibly since the crate becomes a library for itself" |
-| static initializer 変更 | **✗ サイレント無視** | "Changes to static initializers will not be observed" |
-| 新規 global / static 追加 | △ パッチ可だがデストラクタ呼ばれない | "You may add new globals at runtime, but their destructors will never be called" |
-| global / static のリネーム | △ 別物として扱われる（状態ロス） | "Globals are tracked across patches, but renames are observed as introducing a new global" |
-| `Cargo.toml` 変更（依存追加・feature・version） | **✗ フルビルド** | 直接明記なし。コード生成シードが変わるため当然 |
+| 対象                                                | 挙動                                 | 公式記述                                                                                                                                                     |
+| --------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| struct のレイアウト・アライメント変更               | **✗ フルビルド**                     | "Subsecond currently does not support hot-reloading of structs. This is because the generated code assumes a particular layout and alignment of the struct." |
+| tip crate 以外（依存crate, workspace member）の編集 | **✗ パッチ非対象**                   | "Rust hot-patching currently only tracks the 'tip' crate in your project. If you edit code in any of your dependencies … DX does not register that change"   |
+| `main.rs` + `lib.rs` 二段構成                       | **✗ パッチ機能不全**                 | "Crate setups that have a main.rs importing a lib.rs won't patch sensibly since the crate becomes a library for itself"                                      |
+| static initializer 変更                             | **✗ サイレント無視**                 | "Changes to static initializers will not be observed"                                                                                                        |
+| 新規 global / static 追加                           | △ パッチ可だがデストラクタ呼ばれない | "You may add new globals at runtime, but their destructors will never be called"                                                                             |
+| global / static のリネーム                          | △ 別物として扱われる（状態ロス）     | "Globals are tracked across patches, but renames are observed as introducing a new global"                                                                   |
+| `Cargo.toml` 変更（依存追加・feature・version）     | **✗ フルビルド**                     | 直接明記なし。コード生成シードが変わるため当然                                                                                                               |
 
 その他の既知の制約: **iOS 実機は未対応**（codesign 制約。シミュレータは可）、
 **thread-local がパッチごとにリセット**される既知 issue。
@@ -79,19 +79,19 @@ Dioxus 0.7 + `dx serve --hotpatch` で実働デモを組んで実測した。
 公式に明記のない編集について、シンボル単位パッチという仕組みから推定した挙動。
 **「頻度」列はデータではなく定性的印象**（プロジェクト・フェーズで偏る）。
 
-| 変更の種類 | パッチ可否 | 一般Webアプリでの発生頻度 |
-|---|---|---|
-| 関数本体・制御フロー・エラーハンドリングの変更 | ✓ パッチ | **非常に高い**（編集の大半） |
-| 文字列リテラル / 数値定数の変更 | ✓ パッチ | 高い |
-| 新しいヘルパー関数の追加 | ✓ パッチ（新シンボル） | 高い |
-| `rsx!` 内のテキスト・属性値変更 | ✓ Hotreloading（RSXパス） | 非常に高い |
-| 新しいハンドラ/ルートの追加 | △ 関数本体はパッチ可。ルート登録は要再起動の可能性 | 中 |
-| **struct への新フィールド追加** | **✗ フルビルド** | **中〜高（モデル拡張で必発）** |
-| struct フィールドの型変更 | **✗ フルビルド** | 中 |
-| enum 新バリアント追加 | docs明記なし。レイアウト依存の可能性 | 中 |
-| 関数シグネチャに新引数追加 | docs明記なし。要実機検証 | 中 |
-| `Cargo.toml` に依存追加 | **✗ フルビルド** | 低（初期に集中） |
-| トレイト定義・新 `impl` ブロック | docs明記なし。generics 絡みは "cascade of codegen changes" 警告あり | 低〜中 |
+| 変更の種類                                     | パッチ可否                                                          | 一般Webアプリでの発生頻度      |
+| ---------------------------------------------- | ------------------------------------------------------------------- | ------------------------------ |
+| 関数本体・制御フロー・エラーハンドリングの変更 | ✓ パッチ                                                            | **非常に高い**（編集の大半）   |
+| 文字列リテラル / 数値定数の変更                | ✓ パッチ                                                            | 高い                           |
+| 新しいヘルパー関数の追加                       | ✓ パッチ（新シンボル）                                              | 高い                           |
+| `rsx!` 内のテキスト・属性値変更                | ✓ Hotreloading（RSXパス）                                           | 非常に高い                     |
+| 新しいハンドラ/ルートの追加                    | △ 関数本体はパッチ可。ルート登録は要再起動の可能性                  | 中                             |
+| **struct への新フィールド追加**                | **✗ フルビルド**                                                    | **中〜高（モデル拡張で必発）** |
+| struct フィールドの型変更                      | **✗ フルビルド**                                                    | 中                             |
+| enum 新バリアント追加                          | docs明記なし。レイアウト依存の可能性                                | 中                             |
+| 関数シグネチャに新引数追加                     | docs明記なし。要実機検証                                            | 中                             |
+| `Cargo.toml` に依存追加                        | **✗ フルビルド**                                                    | 低（初期に集中）               |
+| トレイト定義・新 `impl` ブロック               | docs明記なし。generics 絡みは "cascade of codegen changes" 警告あり | 低〜中                         |
 
 **不確定領域**（実機で確認しない限り断定できないもの）: enum バリアント追加 / 関数シグネチャ変更 /
 generic monomorphization の増加 / 新規 `impl` ブロック追加 / マクロ展開結果が変わる変更（特に手続きマクロ）。
