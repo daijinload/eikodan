@@ -63,3 +63,16 @@ oxfmt（Prettier 互換）は markdown のテーブルを**列の最大幅にパ
 
 `./run lint` は **push 前に節目で手動**で回す（`./run css-check` と同じ運用。pre-commit は使わない）。
 理由は軽量な dev ループと最終確認を分けるため ── [`../CLAUDE.md`](../CLAUDE.md) 「イテレーションの回し方」。
+
+**同じ `./run lint` を CI でも回す**（`.github/workflows/lastshot-ci.yml` の `lint` ジョブ）。
+手元で回し忘れても main に入らないようにするための最後の網で、**手動運用を置き換えるものではない**
+（CI で気付くのは遅すぎる ── 手元で通してから push する前提は変わらない）。
+
+- **`test` ジョブとは `needs` で繋がず並列**にしている。lint は DB もアプリ起動も要らず、
+  落ちたときに知りたいことが test と別物だから。直列に積むと「整形ミス1つで E2E まで待たされる」
+  「E2E が落ちると整形の結果が見えない」の両方が起きる。
+- **ツールのバージョンは CI 側でピン留めする。** ローカルは brew の最新、CI は明示バージョン。
+  揃えないと「ローカルは緑なのに CI だけ赤」になるので、**上げるときは両方一緒に上げる**。
+- **rustfmt / clippy 以外は brew 配布物を Linux で使えない**ので、CI はリリース配布物を直接置く
+  （buf / shfmt / shellcheck）か `uv tool install`（sqlfluff）にしている。oxfmt だけは
+  `lint/setup.sh` の `OXFMT_VERSION` が単一の真実なので、CI からも `./run lint-setup` を呼んで重複を避ける。

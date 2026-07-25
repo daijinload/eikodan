@@ -1,8 +1,12 @@
 # lastshot の CI。GitHub は「リポジトリ直下の .github/workflows/」しか実行しないため、
 # monorepo（eikodan）では lastshot/.github/ ではなくここに置く（lastshot/** だけを対象に path フィルタ）。
 #
-# 何をするか（ローカルの ./run と同じことを Linux ネイティブで一気通し）:
-#   build(release) → CSSゲート(Tailwind purge + semgrep) → 起動 → HTTP黒箱(test-http) → ブラウザE2E
+# 何をするか（ローカルの ./run と同じことを Linux ネイティブで一気通し）。ジョブは2本で、依存関係が
+# 無いので**並列に走る**:
+#   test … build(release) → CSSゲート(Tailwind purge + semgrep) → 起動 → HTTP黒箱(test-http) → ブラウザE2E
+#   lint … ./run lint（rustfmt / clippy / oxfmt / buf / shfmt+shellcheck / sqlfluff）
+# 分けている理由: lint は DB もアプリ起動も要らず、落ちたときに知りたいことが test と別物だから。
+# 直列に積むと「整形ミス1つで E2E まで待たされる／E2E が落ちると整形の結果が見えない」になる。
 # DB は GitHub の postgres サービス（TCP）。dev機向け最適化（sccache/mold/-Zthreads）は
 # 追加ツール無しの素ビルドにするため env で無効化（実測確認済み: RUSTFLAGS="" が .cargo/config.toml の
 # target rustflags を置換、CARGO_BUILD_RUSTC_WRAPPER="" が sccache を無効化）。
@@ -156,3 +160,71 @@ jobs:
       - name: Stop app
         if: always()
         run: kill "$(cat /tmp/app.pid)" 2>/dev/null || true
+
+  # fmt/lint ゲート。test ジョブとは needs で繋がないので**並列に走る**。
+  # DB もアプリ起動も要らないぶん test より軽い（重いのは clippy のビルドだけ）。
+  lint:
+    runs-on: ubuntu-24.04-arm # test と揃える（ローカル aarch64 とのアーキ一致）
+    defaults:
+      run:
+        working-directory: lastshot
+    env:
+      # test ジョブと同じく dev機向け最適化を無効化（素ビルド）。
+      RUSTFLAGS: ""
+      CARGO_BUILD_RUSTC_WRAPPER: ""
+    steps:
+      - uses: actions/checkout@v4
+
+      # clippy は schema をコンパイルするので build.rs の protoc が要る。
+      - name: Install protoc
+        run: |
+          pkgs="protobuf-compiler"
+          sudo apt-get install -y --no-install-recommends $pkgs \
+            || { sudo apt-get update && sudo apt-get install -y --no-install-recommends $pkgs; }
+
+      # cranelift component が要る理由は build script の codegen（[profile.dev.package."*"]）。
+      # 詳細は test ジョブ側の同名ステップのコメント。
+      - name: Install Rust nightly (rust-toolchain.toml に合わせる)
+        run: rustup toolchain install nightly --component rustfmt,clippy,rust-src,rustc-codegen-cranelift-preview --profile minimal
+
+      # test ジョブとは別ランナー＝別 target/ なので、キャッシュも別建てにする（shared-key で明示）。
+      # 混ぜると「release を焼いた test 側」と「dev 全ターゲットを焼いた lint 側」が互いを上書きし合う。
+      - name: Cache cargo + target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: lastshot
+          shared-key: lint
+
+      # brew 配布の4本は Linux では重い/無いので、リリース配布物を直接置く。
+      # バージョンはローカル（brew）の実測値に合わせてピン留め ── CI だけ新しくなって
+      # 「ローカルは緑なのに CI だけ赤」になるのを防ぐ。上げるときはローカルと一緒に上げる。
+      - name: Install buf / shfmt / shellcheck / sqlfluff
+        env:
+          BUF_VERSION: 1.69.0
+          SHFMT_VERSION: 3.13.1
+          SHELLCHECK_VERSION: 0.11.0
+          SQLFLUFF_VERSION: 4.2.2
+        run: |
+          set -euo pipefail
+          bin="$HOME/.local/bin"
+          mkdir -p "$bin"
+          curl -fsSL -o "$bin/buf" \
+            "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-Linux-aarch64"
+          curl -fsSL -o "$bin/shfmt" \
+            "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/shfmt_v${SHFMT_VERSION}_linux_arm64"
+          chmod +x "$bin/buf" "$bin/shfmt"
+          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.aarch64.tar.xz" \
+            | tar -xJ --strip-components=1 -C "$bin" "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
+          # sqlfluff は Python 製。uv は semgrep と同じ理由で採用（pipx より速い ── docs/ci-performance.md §2）。
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          "$bin/uv" tool install "sqlfluff==${SQLFLUFF_VERSION}"
+          echo "$bin" >> "$GITHUB_PATH"
+
+      # 残りの oxfmt（node 製・lint/.lint-tools にローカル固定）を入れる。
+      # バージョンは lint/setup.sh の OXFMT_VERSION が単一の真実なので、ここでは重複させず
+      # setup.sh をそのまま呼ぶ。上の4本を先に入れてあるので brew 分岐には入らない。
+      - name: Install oxfmt (= ./run lint-setup)
+        run: ./run -q lint-setup
+
+      - name: Lint gate (= ./run lint)
+        run: ./run -q lint
