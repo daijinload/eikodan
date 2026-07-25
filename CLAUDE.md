@@ -43,3 +43,22 @@ grep -rn -E '\.\./(fastweb|connectweb|pg-bench|rust-htmx|subsecond-demo|playwrig
 他スタック（Node.js / Laravel など）との比較実装は**ブランチに置いたままにし、main にはドキュメントだけ**を入れる。
 ドキュメントからブランチの GitHub URL へリンクする。既存の 2 つのベンチ
 （`bench-rust-vs-node` / `feat/lastshot-3stack-compare`）がこの形。
+
+## git 運用
+
+- **マージはユーザー（daijinload）が行う。** Claude はブランチ作成と push まで。
+- **force push は必要なときだけ。** 使ってよいのは**履歴を書き換えた直後**（`git rebase` で main を
+  取り込んだ / commit を amend した 等）に限る。通常の追加コミットで force を付けない ──
+  push が弾かれたら、まず**なぜ弾かれたのか**を確かめること（他所からの push を消しかけている可能性がある）。
+- **force push の前に必ずバックアップブランチを切る。徹底する。** 書き換え前の commit を指すブランチを
+  ローカルに残してから push する。
+
+  ```sh
+  git branch backup/<元ブランチ名>-<YYYYMMDD-HHMM>  # 書き換える前に切る（push 不要・ローカルで十分）
+  git push --force-with-lease origin <ブランチ名>
+  ```
+
+- **`--force` ではなく `--force-with-lease` を使う。** 手元が知らないうちに進んだ remote を
+  問答無用で上書きしない（別 worktree・別マシンからの push を守るため）。
+
+理由: 履歴の書き換えは **git 操作の中で唯一「元に戻せなくなる」種類**なので、戻し先を作ってから実行する。
