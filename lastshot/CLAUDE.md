@@ -1,11 +1,10 @@
 # lastshot — AIエージェント運用ルール
 
-`eikodan` の各サブプロジェクトの結論を統合した本番実装。土台は2つ:
+`eikodan` の各サブプロジェクトの結論を統合した本番実装。**このファイルが掟の唯一の実体**で、
+外部を参照しなくても完結している（実験場フォルダは将来消える前提なので、そこを参照しない）。
 
-- **[fastweb](../fastweb/CLAUDE.md)** = ビルド回避 + package by feature（ノービルド開発の掟）
-- **[connectweb](../connectweb/CLAUDE.md)** = スキーマファースト（.proto 単一真実の掟）
-
-両者の `CLAUDE.md` のルールは**原則すべて引き継ぐ**。ここには lastshot 固有の差分（特に **DB 作法**）だけを書く。
+土台になった考え方は2つ ── **ビルド回避 + package by feature**（fastweb 由来）と
+**スキーマファースト = .proto 単一真実**（connectweb 由来）。両方ともこのファイルに取り込み済み。
 構造を作ってもエージェントの行動が局所性を壊すと意味がないので、以下を守ること。
 
 ## 大方針（4層の開発ループ）
@@ -27,7 +26,10 @@
   描画と `<!-- view-data -->` 埋め込みの両方に流す（データ取得は1回 ── 描画用と埋め込み用で別取得しない＝ズレる）。
   素のHTML（埋め込み不要）は `render`。view-data は `<script>` でなく**HTMLコメント**＝本番DOM/JSに出さないデバッグ覗き窓。
 - **テンプレも埋め込みJSONも camelCase**。buffa の serde は proto3 JSON 準拠（proto の `recent_activities` は
-  `view.recentActivities`）。**proto3 JSON は 0 値を省略する**ので、テストやテンプレで「未設定＝0」を考慮する。
+  `view.recentActivities`）。**snake_case で書くと undefined になる**（エラーにならず静かに空になるので気付きにくい）。
+  **proto3 JSON は 0 値を省略する**ので、テストやテンプレで「未設定＝0」を考慮する。
+- **ビュー専用メッセージの命名は `XxxView` / `XxxPageView`**。view-source で見える範囲 =
+  もともとその画面に出す約束の範囲、を常に保つ。
 
 ## DB 作法（lastshot 固有 ── これが一番の追加点）
 
@@ -61,6 +63,11 @@
 - `schema` は土台。**全クレートが共有する**（依存は buffa/connectrpc/serde のみ）。
 - `db` も土台。**service 層（feature）と app が共有する**（依存は sqlx のみ、`db` クレートに閉じる）。
 - `feature-*` の依存は **webcore / schema / db だけ**。feature 間依存・connectrpc 直依存・`webcore→feature` 逆依存は禁止。
+  各 `feature-*` は**葉(leaf)に保つ**（局所性が崩壊するため）。
+- **共有コア `webcore` には「本当に安定した型・処理」だけを置く。** 開発中の型はまず feature 内に置き、
+  **多少の型重複は許容する。共有コアへの昇格は人間が判断する**（エージェントが勝手に上げない）。
+- 各 feature は **`pub fn routes() -> Router<AppState>` を公開**し、`app` が `.merge()` するだけ。
+- **テンプレートは各 feature の `templates/` に同居**させ、名前は **`feature名/部品名.html`** 規約に従う。
 - `rpc` は Connect API の薄い殻。**service 層関数を import して呼ぶだけ**。`rpc → feature-*` はOK、逆は禁止。
   同一プロセスなので**自分自身への gRPC ループバックを張らない**（関数呼び出しで済ます）。
 - `app`(bin) は薄い層: ルーター組み立て・起動・ライブリロード・DBプール生成・`/static/app.css` 配信のみ。
@@ -72,10 +79,14 @@
   クレートだけ**に当てる（`cargo fmt -p <crate>`。全クレート一括は触っていないクレートまで再ビルドさせるため避ける）。
   **push 前の最終確認では `./run fmt` で一括整形してよい**（どうせ全体をビルドするので相乗り。`cargo fmt` は
   差分のあるファイルだけ書き戻す＝整形済みは再ビルドされない）。lint/fmt の配線は [`lint/`](./lint/)。
-- **UIの変更はテンプレートとCSSで完結させる。** Rust に触るのはデータ取得の形が変わるときだけ。HTMLはRustに書かず
-  テンプレに置く（`assets/input.css` は `source(none)` でテンプレHTMLだけを走査対象にしている）。
+- **UIの変更はテンプレートとCSSで完結させる。** Rust に触るのはデータ取得の形が変わるときだけ。
+  **表示分岐・整形はできるだけ MiniJinja 側に寄せる。** HTMLはRustに書かずテンプレに置く
+  （`assets/input.css` は `source(none)` でテンプレHTMLだけを走査対象にしている）。Rust 文字列で HTML を返すと
+  (1)変更のたびに再ビルドが要る (2)クラスが走査外で無スタイルになる、の二重で損をする。
+  **HTMX の部分HTMLも `render_view_fragment` でテンプレから返す**こと。
 - **Tailwind のクラス名は常に完全形で書く。** `text-{{ color }}-500` のような動的合成は禁止（CLIパージで本番だけ消える。
   日常はCDNなので開発中は再現せず、push前の `assets/check-css.sh`（semgrep）が代わりに捕まえる）。
+  分岐は `{% if error %}text-error{% else %}text-success{% endif %}` と**完全形で書き分ける**。
 - **codegen は `schema` に隔離。** build.rs(protoc) が走るのは proto を変えたときだけ。proto を変えたら
   `cargo check -p schema` で確認してから利用側を直す。
 - **CSSモードは実行時グローバル `css_built`（base.html）で切替。** `cfg!(debug_assertions)` に紐付けない

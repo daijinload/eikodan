@@ -14,12 +14,12 @@
 
 | 要素                                                                                                                                                       | 出自                                 | lastshot での形                         |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | --------------------------------------- |
-| ノービルドUI（axum + HTMX + MiniJinja + daisyUI）+ ホットリロード + package-by-feature + ビルド最適化（nightly/lld/-Zthreads/Cranelift/dev=opt0/sccache） | [fastweb](../fastweb/)               | 土台                                    |
-| スキーマファースト（`.proto` 単一真実 → 1つの生成型で HTML描画 / `<!-- view-data -->` 埋め込み / Connect API を同源駆動）                                  | [connectweb](../connectweb/)         | 土台                                    |
-| Postgres 永続化（unix ソケット最速 / `query!` マクロ不使用でビルド速度維持）                                                                               | [pg-bench](../pg-bench/)             | `crates/db` + service 層                |
-| サンプル題材（カウンター）                                                                                                                                 | [subsecond-demo](../subsecond-demo/) | `crates/feature-counter`（HTMX + DB化） |
+| ノービルドUI（axum + HTMX + MiniJinja + daisyUI）+ ホットリロード + package-by-feature + ビルド最適化（nightly/lld/-Zthreads/Cranelift/dev=opt0/sccache） | fastweb（実験場）               | 土台                                    |
+| スキーマファースト（`.proto` 単一真実 → 1つの生成型で HTML描画 / `<!-- view-data -->` 埋め込み / Connect API を同源駆動）                                  | connectweb（実験場）         | 土台                                    |
+| Postgres 永続化（unix ソケット最速 / `query!` マクロ不使用でビルド速度維持）                                                                               | pg-bench（実験場）             | `crates/db` + service 層                |
+| サンプル題材（カウンター）                                                                                                                                 | subsecond-demo（実験場） | `crates/feature-counter`（HTMX + DB化） |
 | CSS最終確認ゲート（Tailwind CLI フルパージ + semgrep）                                                                                                     | fastweb `assets/`                    | `assets/`                               |
-| タスクランナー（bash 関数ディスパッチャ）                                                                                                                  | [task-runners](../task-runners/)     | `./run`                                 |
+| タスクランナー（bash 関数ディスパッチャ）                                                                                                                  | task-runners（実験場）     | `./run`                                 |
 | 開発環境（macOS bash 5.x）                                                                                                                                 | [docs/bash-setup.md](./docs/bash-setup.md)    | 下記セットアップから参照                |
 
 > 除外: **subsecond ホットパッチ**（axum 素組には非対応＝Dioxus 移行が要る。判断の記録は
@@ -159,7 +159,7 @@ CSS=built cargo run -p app  # 最終目視: CLI生成の /static/app.css を配�
 ## lint / format（push前ゲート）
 
 種別ごとに最適なツールを当てる（Rust=rustfmt/clippy・他=oxfmt・proto=buf・shell=shfmt/shellcheck・SQL=sqlfluff。
-1本では賄えない）。配線とルールは [`lint/`](./lint/) に自己完結（選定根拠は [`../lint-format/`](../lint-format/) showcase）。
+1本では賄えない）。配線とルールは [`lint/`](./lint/) に自己完結（選定根拠は [`docs/lint-format.md`](./docs/lint-format.md)）。
 
 ```sh
 ./run lint-setup          # 初回のみ: oxfmt を lint/.lint-tools にローカル固定、不足分は brew

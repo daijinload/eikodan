@@ -1,7 +1,9 @@
 # connectweb
 
-> **役割: 実験場（アーカイブ）。** スキーマファーストの結論は本体 [`lastshot/`](../lastshot/) に取り込み済み
-> （作法は [`lastshot/CLAUDE.md`](../lastshot/CLAUDE.md)）。知見の索引は [`lastshot/docs/`](../lastshot/docs/)。
+> **役割: 実験場。このフォルダは将来削除される。**
+> ここで出した「スキーマファースト」の結論は本体 [`lastshot/`](../lastshot/) に取り込み済みで、
+> **知見は [`lastshot/docs/`](../lastshot/docs/) が正**（このフォルダを参照していない＝消しても失われない）。
+> 残しているのは計測を再現するためのコードと手順だけ。
 
 **スキーマ（.proto）を「単一の真実」に置き、1つの生成型から HTML・埋め込みJSON・Connect API
 の3経路を同時に駆動する** Rust スタックの曳光弾。[fastweb](../fastweb/) のビルド高速化と

@@ -20,6 +20,8 @@
 | 8 | **`wild` リンカ / さらに速いリンカ探し** | lld が既に最速で詰めしろ無し（lld ≈ apple-ld）。`wild` は Linux 専用 | [`../cold-start.md`](../cold-start.md) §③ |
 | 9 | **playground crate 方式** | 本体との結合が増えると playground だけで完結しなくなる。package by feature で同等の効果が得られた | [`0001-subsecond-hotpatch.md`](./0001-subsecond-hotpatch.md) |
 | 10 | **compose 分割 vs 全部入り single の CI 比較** | 保留。単一コンテナが速い理由は tmpfs + `fsync=off` でありコンテナ構成とは無関係、と分かった時点で優先度が落ちた | [`../container-ops.md`](../container-ops.md) |
+| 11 | **Oxlint / Biome の linter** | JS/TS 専用で Rust 中心の構成では空振りする。品質担保は型チェック + clippy に集約 | [`../lint-format.md`](../lint-format.md) |
+| 12 | **`make` / `just` などのタスクランナー** | `./run`（bash 関数 + ディスパッチャ）で足り、追加インストールがゼロになる | [`../task-runner.md`](../task-runner.md) |
 
 ## 採用（比較検討の末に選んだもの）
 
@@ -32,6 +34,8 @@
 | **`Swatinem/rust-cache`** | build ~76s → ~15s。最大の効き。「少数の太いキャッシュ」の本命 | [`../ci-performance.md`](../ci-performance.md) §5 |
 | **Playwright Chromium の CI キャッシュ** | 当初却下 → 再計測で採用。正味 ~10s + CI 総時間のブレの主因（Chromium DL 変動）を除去 | [`../ci-performance.md`](../ci-performance.md) §8 |
 | **agent-browser（探索・QA 用）** | 1ステップ 16.5ms / 110B。複数操作を1ターンに束ねられる | [`0002-playwright-mcp.md`](./0002-playwright-mcp.md) |
+| **`./run`（自作 bash ディスパッチャ）** | ツール追加ゼロで fail-fast・依存の重複排除まで入る。一般論では `just` が最有力 | [`../task-runner.md`](../task-runner.md) |
+| **種別ごとに lint/format を使い分け** | 1本で全種別は賄えない。rustfmt+clippy / oxfmt / buf / shfmt / sqlfluff の組み合わせ | [`../lint-format.md`](../lint-format.md) |
 | **Flyway でマイグレーション管理** | ローカルに JRE/CLI を入れず docker image で完結。タイムスタンプ版数でブランチ並行時の衝突を避けられる | [`../../CLAUDE.md`](../../CLAUDE.md) DB 作法 |
 
 ---

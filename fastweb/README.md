@@ -1,8 +1,9 @@
 # fastweb
 
-> **役割: 実験場（アーカイブ）。** ここで出した結論は本体 [`lastshot/`](../lastshot/) に取り込み済みで、
-> ドキュメントは [`lastshot/docs/`](../lastshot/docs/) に集約した（ビルド速度 → [`build-speed.md`](../lastshot/docs/build-speed.md) /
-> ホットリロード → [`hot-reload.md`](../lastshot/docs/hot-reload.md)）。この README は再現用の手順として残している。
+> **役割: 実験場。このフォルダは将来削除される。**
+> ここで出した「ビルド回避 + package by feature」の結論は本体 [`lastshot/`](../lastshot/) に取り込み済みで、
+> **知見は [`lastshot/docs/`](../lastshot/docs/) が正**（このフォルダを参照していない＝消しても失われない）。
+> 残しているのは計測を再現するためのコードと手順だけ。
 
 「ビルドを避けて開発する」ことに全振りした、Rust + HTMX + MiniJinja + daisyUI の曳光弾。
 **変更の7〜8割をノービルドで反映、Rustを触っても数秒、最後だけ release ビルド**という三層ループを実現する。

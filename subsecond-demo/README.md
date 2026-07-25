@@ -1,8 +1,9 @@
 # subsecond-demo
 
-> **役割: 実験場（アーカイブ）。** 検証の結果 **subsecond は不採用**。理由は
-> [`lastshot/docs/decisions/0001-subsecond-hotpatch.md`](../lastshot/docs/decisions/0001-subsecond-hotpatch.md)。
-> このデモと下記の制約一覧は、判断の根拠として残している。
+> **役割: 実験場。このフォルダは将来削除される。**
+> ここで出した「subsecond ホットパッチ検証」の結論は本体 [`lastshot/`](../lastshot/) に取り込み済みで、
+> **知見は [`lastshot/docs/`](../lastshot/docs/) が正**（このフォルダを参照していない＝消しても失われない）。
+> 残しているのは計測を再現するためのコードと手順だけ。
 
 Dioxus 0.7 + subsecond によるRustコードのホットパッチ検証用デモ。
 親リポジトリ「eikodan」（理想のWebシステムを模索する曳光弾）の subsecond 検証成果物。

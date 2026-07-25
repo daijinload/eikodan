@@ -21,11 +21,22 @@
 
 理由: git でバージョン管理・チーム共有でき、リポジトリを見れば全体像が分かる状態を保つため。
 
-### 実験場と本体
+### 実験場と本体 ── lastshot は自己完結させる
 
 `fastweb/` `pg-bench/` `rust-htmx/` `subsecond-demo/` `connectweb/` `playwright-sample/` `lint-format/`
-`task-runners/` は**実験場（アーカイブ）**。結論は `lastshot/` に取り込み済みで、ドキュメントは
-`lastshot/docs/` に移してある。**実験場に新しいドキュメントを足さない**こと（再現用のコードと手順だけ残す）。
+`task-runners/` は**実験場で、将来まるごと削除する**。したがって:
+
+- **`lastshot/` から実験場を参照してはいけない。** リンクも「詳細は◯◯を見よ」も禁止。
+  必要な事実（実測値・制約一覧・公式引用）は**引用して `lastshot/` の中に取り込む**。
+- **実験場に新しいドキュメントを足さない。** 残すのは計測を再現するためのコードと手順だけ。
+- 逆向き（実験場 → `lastshot/docs/`）の参照はOK。フォルダごと消えるので問題にならない。
+
+判定方法: 以下が何も出なければ自己完結できている。
+
+```sh
+grep -rn -E '\.\./(fastweb|connectweb|pg-bench|rust-htmx|subsecond-demo|playwright-sample|lint-format|task-runners)/' \
+  lastshot/ --include="*.md" --include="*.toml" --include="*.yml"
+```
 
 ### 比較用の実装はマージしない
 

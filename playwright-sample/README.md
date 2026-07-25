@@ -1,8 +1,9 @@
 # playwright-sample
 
-> **役割: 実験場（アーカイブ）。** **Playwright MCP は不採用**・Playwright 本体と agent-browser に役割分担。
-> 判断は [`lastshot/docs/decisions/0002-playwright-mcp.md`](../lastshot/docs/decisions/0002-playwright-mcp.md)。
-> 下記の比較表と計測条件は、その根拠として残している。
+> **役割: 実験場。このフォルダは将来削除される。**
+> ここで出した「Playwright / MCP の評価」の結論は本体 [`lastshot/`](../lastshot/) に取り込み済みで、
+> **知見は [`lastshot/docs/`](../lastshot/docs/) が正**（このフォルダを参照していない＝消しても失われない）。
+> 残しているのは計測を再現するためのコードと手順だけ。
 
 Microsoft [Playwright](https://playwright.dev/) の E2E テストのサンプルです。
 AI エージェントからのブラウザ操作は [agent-browser](https://github.com/vercel-labs/agent-browser)（ルート `README.md`）に役割分担し、

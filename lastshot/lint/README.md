@@ -1,7 +1,7 @@
 # lint/ — lastshot の lint / format ゲート
 
 種別ごとに最適な lint / format ツールを当てる構成（1本で全部は賄えない）。
-ツール選定の**根拠と単体デモは [`../../lint-format/`](../../lint-format/) showcase**にあり、
+ツール選定の**根拠は [`../docs/lint-format.md`](../docs/lint-format.md)** にあり、
 ここはその結論を **lastshot の実ファイルに当てる本番配線**。
 
 ## 何に何を当てるか

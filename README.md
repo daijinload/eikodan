@@ -24,8 +24,9 @@
 
 ## 実験場（アーカイブ）
 
-個別要素を試した曳光弾。**結論は lastshot に取り込み済みで、ドキュメントは
-[`lastshot/docs/`](./lastshot/docs/) に集約済み**。ここに残しているのは**再現用のコードと手順**です。
+個別要素を試した曳光弾。**これらのフォルダは将来削除する予定**です。
+知見は [`lastshot/docs/`](./lastshot/docs/) に取り込み済みで、**lastshot はこれらを一切参照していない**ので、
+消しても情報は失われません。ここに残しているのは計測を再現するためのコードと手順だけです。
 
 | ディレクトリ | 何を試したか | 出た結論の行き先 |
 | --- | --- | --- |
@@ -35,8 +36,8 @@
 | [connectweb](./connectweb/) | .proto を単一の真実に、生成型から HTML / JSON / Connect API を駆動 | [`lastshot/CLAUDE.md`](./lastshot/CLAUDE.md) スキーマファーストの掟 |
 | [pg-bench](./pg-bench/) | 「最速 Postgres をメモリに書く」を実効速度で横並び比較 | [`docs/postgres.md`](./lastshot/docs/postgres.md) |
 | [playwright-sample](./playwright-sample/) | Playwright の E2E サンプル + Playwright MCP の評価 | MCP は**不採用** → [`decisions/0002`](./lastshot/docs/decisions/0002-playwright-mcp.md) |
-| [lint-format](./lint-format/) | lint/format ツールを種別ごとに実演する showcase | [`lastshot/lint/`](./lastshot/lint/) |
-| [task-runners](./task-runners/) | 「Makefile の代わりに何を使うか」を 9 通りで横並び比較 | `lastshot/run`（自作 bash ディスパッチャ） |
+| [lint-format](./lint-format/) | lint/format ツールを種別ごとに実演する showcase | [`docs/lint-format.md`](./lastshot/docs/lint-format.md) |
+| [task-runners](./task-runners/) | 「Makefile の代わりに何を使うか」を 9 通りで横並び比較 | [`docs/task-runner.md`](./lastshot/docs/task-runner.md) |
 
 ### 比較用の実装はブランチに置く
 
@@ -52,7 +53,6 @@
 | ファイル | 内容 |
 | --- | --- |
 | [CLAUDE.md](./CLAUDE.md) | AIエージェント向けの共通方針（ドキュメントをどこに書くか） |
-| [directory-layout.md](./directory-layout.md) | 設定ファイルの置き場所の方針（ルート直下 vs フォルダ集約） |
 
 ## agent-browser のインストール
 
